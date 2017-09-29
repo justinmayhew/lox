@@ -2,7 +2,7 @@ use std::num::ParseIntError;
 use std::str::Chars;
 
 #[derive(Debug, PartialEq, Eq)]
-enum Token {
+pub enum Token {
     LeftParen,
     RightParen,
     LeftBrace,
@@ -49,7 +49,7 @@ enum Token {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum ScanError {
+pub enum ScanError {
     UnclosedStr,
     ParseInt(ParseIntError),
 }
@@ -62,13 +62,13 @@ impl From<ParseIntError> for ScanError {
 
 type ScanResult<T> = Result<T, ScanError>;
 
-struct Scanner<'s> {
+pub struct Scanner<'s> {
     src: Chars<'s>,
     peek: Option<char>,
 }
 
 impl<'s> Scanner<'s> {
-    fn new(src: &'s str) -> Self {
+    pub fn new(src: &'s str) -> Self {
         Self {
             src: src.chars(),
             peek: None,

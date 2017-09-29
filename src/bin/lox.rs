@@ -1,10 +1,16 @@
 extern crate lox;
 
-use std::io;
+use lox::parser::*;
 
 fn main() {
-    let mut line = String::new();
-    io::stdin()
-        .read_line(&mut line)
-        .expect("error reading line");
+    let expr = Expr::Binary(
+        Box::new(Expr::Unary(
+            UnaryOp::Minus,
+            Box::new(Expr::Literal(Value::Int(123))),
+        )),
+        BinOp::Star,
+        Box::new(Expr::Grouping(Box::new(Expr::Literal(Value::Int(456))))),
+    );
+
+    println!("{}", expr);
 }

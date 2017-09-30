@@ -51,7 +51,7 @@ impl fmt::Display for UnaryOp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Value {
     Str(String),
     Int(i64),
@@ -80,6 +80,8 @@ pub enum Expr {
     Literal(Value),
     /// A unary expression, for example `!true`.
     Unary(UnaryOp, Box<Expr>),
+    /// A variable expression, for example `name`..
+    Var(String),
 }
 
 impl fmt::Display for Expr {
@@ -89,6 +91,7 @@ impl fmt::Display for Expr {
             Expr::Grouping(ref expr) => write!(f, "(group {})", expr),
             Expr::Literal(ref value) => write!(f, "{}", value),
             Expr::Unary(op, ref expr) => write!(f, "({} {})", op, expr),
+            Expr::Var(ref name) => write!(f, "{}", name),
         }
     }
 }
@@ -99,19 +102,23 @@ pub enum Stmt {
     Expr(Expr),
     /// A print statement.
     Print(Expr),
+    /// A variable declaration.
+    VarDecl(String, Option<Expr>),
 }
 
 #[derive(Debug)]
 pub enum ParseError {
-    UnexpectedToken(String),
+    UnexpectedToken(Token, String),
     MissingExpr(Token),
+    ExpectedIdentifier(Token),
 }
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ParseError::UnexpectedToken(ref msg) => write!(f, "Unexpected token: {}", msg),
+            ParseError::UnexpectedToken(ref token, ref msg) => write!(f, "{}: Next token: {:?}", msg, token),
             ParseError::MissingExpr(ref token) => write!(f, "Expected expression, found {:?}", token),
+            ParseError::ExpectedIdentifier(ref token) => write!(f, "Expected identifier, found {:?}", token),
         }
     }
 }
@@ -132,7 +139,7 @@ impl Parser {
         let mut stmts = Vec::new();
 
         while !self.is_at_end() {
-            stmts.push(self.statement()?);
+            stmts.push(self.declaration()?);
         }
 
         Ok(stmts)
@@ -151,6 +158,20 @@ impl Parser {
 
     fn advance_if_str(&mut self) -> Option<String> {
         let rv = if let Token::Str(ref s) = *self.peek() {
+            Some(s.clone())
+        } else {
+            None
+        };
+
+        if rv.is_some() {
+            self.advance();
+        }
+
+        rv
+    }
+
+    fn advance_if_identifier(&mut self) -> Option<String> {
+        let rv = if let Token::Identifier(ref s) = *self.peek() {
             Some(s.clone())
         } else {
             None
@@ -204,7 +225,21 @@ impl Parser {
             return Ok(());
         }
 
-        Err(ParseError::UnexpectedToken(message.into()))
+        Err(ParseError::UnexpectedToken(self.peek().clone(), message.into()))
+    }
+
+    fn consume_identifier(&mut self) -> ParseResult<String> {
+        let result = if let Token::Identifier(ref name) = *self.peek() {
+            Ok(name.clone())
+        } else {
+            Err(ParseError::ExpectedIdentifier(self.peek().clone()))
+        };
+
+        if result.is_ok() {
+            self.advance();
+        }
+
+        result
     }
 
     fn synchronize(&mut self) {
@@ -229,6 +264,34 @@ impl Parser {
 
             self.advance();
         }
+    }
+
+    fn declaration(&mut self) -> ParseResult<Stmt> {
+        let result = if self.advance_if(vec![Token::Var]) {
+            self.var_declaration()
+        } else {
+            self.statement()
+        };
+
+        if result.is_err() {
+            self.synchronize();
+        }
+
+        result
+    }
+
+    fn var_declaration(&mut self) -> ParseResult<Stmt> {
+        let name = self.consume_identifier()?;
+
+        let initializer = if self.advance_if(vec![Token::Equal]) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(Token::Semicolon, "Expect ';' after variable declaration.")?;
+
+        Ok(Stmt::VarDecl(name, initializer))
     }
 
     fn statement(&mut self) -> ParseResult<Stmt> {
@@ -356,6 +419,9 @@ impl Parser {
         }
         if let Some(s) = self.advance_if_str() {
             return Ok(Expr::Literal(Value::Str(s)));
+        }
+        if let Some(s) = self.advance_if_identifier() {
+            return Ok(Expr::Var(s));
         }
 
         if self.advance_if(vec![Token::LeftParen]) {

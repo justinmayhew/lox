@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::ops;
 use std::result;
 
@@ -8,16 +9,21 @@ use parser::{BinOp, Expr, UnaryOp, Value, Stmt};
 pub enum Error {
     TypeError(String),
     DivideByZero,
+    UndefinedVar(String),
 }
 
 type Result<T> = result::Result<T, Error>;
 type ValueResult = Result<Value>;
 
-pub struct Interpreter;
+pub struct Interpreter {
+    env: HashMap<String, Value>,
+}
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            env: HashMap::new(),
+        }
     }
 
     pub fn execute(&mut self, stmts: Vec<Stmt>) -> Result<()> {
@@ -35,6 +41,15 @@ impl Interpreter {
             }
             Stmt::Print(expr) => {
                 println!("{}", self.evaluate(expr)?);
+                Ok(())
+            }
+            Stmt::VarDecl(name, initializer) => {
+                let value = match initializer {
+                    Some(expr) => self.evaluate(expr)?,
+                    None => Value::Nil,
+                };
+
+                self.env.insert(name, value);
                 Ok(())
             }
         }
@@ -77,6 +92,12 @@ impl Interpreter {
                         val => panic!("Cannot use unary - on {:?}", val),
                     },
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(value))),
+                }
+            }
+            Expr::Var(name) => {
+                match self.env.get(&name) {
+                    Some(value) => Ok(value.clone()),
+                    None => Err(Error::UndefinedVar(name)),
                 }
             }
         }
@@ -127,7 +148,7 @@ impl ops::Div for Value {
     type Output = ValueResult;
     fn div(self, rhs: Value) -> ValueResult {
         match (self, rhs) {
-            (Value::Int(left), Value::Int(0)) => Err(Error::DivideByZero),
+            (Value::Int(_), Value::Int(0)) => Err(Error::DivideByZero),
             (Value::Int(left), Value::Int(right)) => Ok(Value::Int(left / right)),
             (left, right) => Err(Error::TypeError(format!("Cannot divide {:?} to {:?}", left, right))),
         }

@@ -62,7 +62,7 @@ pub enum Value {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Value::Str(ref s) => write!(f, "\"{}\"", s),
+            Value::Str(ref s) => write!(f, "{}", s),
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
@@ -72,9 +72,13 @@ impl fmt::Display for Value {
 
 #[derive(Debug)]
 pub enum Expr {
+    /// A binary expression, for example `1 + 2`.
     Binary(Box<Expr>, BinOp, Box<Expr>),
+    /// A grouping expression, for example `(1)`.
     Grouping(Box<Expr>),
+    /// A literal expression, for example `1` or `"foo"`.
     Literal(Value),
+    /// A unary expression, for example `!true`.
     Unary(UnaryOp, Box<Expr>),
 }
 
@@ -90,8 +94,26 @@ impl fmt::Display for Expr {
 }
 
 #[derive(Debug)]
+pub enum Stmt {
+    /// An expression statement.
+    Expr(Expr),
+    /// A print statement.
+    Print(Expr),
+}
+
+#[derive(Debug)]
 pub enum ParseError {
     UnexpectedToken(String),
+    MissingExpr,
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ParseError::UnexpectedToken(ref msg) => write!(f, "Unexpected token: {}", msg),
+            ParseError::MissingExpr => write!(f, "Missing expression"),
+        }
+    }
 }
 
 type ParseResult<T> = Result<T, ParseError>;
@@ -106,8 +128,14 @@ impl Parser {
         Self { tokens, pos: 0 }
     }
 
-    pub fn parse(&mut self) -> ParseResult<Expr> {
-        self.expression()
+    pub fn parse(&mut self) -> ParseResult<Vec<Stmt>> {
+        let mut stmts = Vec::new();
+
+        while !self.is_at_end() {
+            stmts.push(self.statement()?);
+        }
+
+        Ok(stmts)
     }
 
     fn advance_if(&mut self, tokens: Vec<Token>) -> bool {
@@ -203,7 +231,27 @@ impl Parser {
         }
     }
 
-    fn expression(&mut self) -> ParseResult<Expr> {
+    fn statement(&mut self) -> ParseResult<Stmt> {
+        if self.advance_if(vec![Token::Print]) {
+            self.print_statement()
+        } else {
+            self.expression_statement()
+        }
+    }
+
+    fn print_statement(&mut self) -> ParseResult<Stmt> {
+        let expr = self.expression()?;
+        self.consume(Token::Semicolon, "Expect ';' after print statement.")?;
+        Ok(Stmt::Print(expr))
+    }
+
+    fn expression_statement(&mut self) -> ParseResult<Stmt> {
+        let expr = self.expression()?;
+        self.consume(Token::Semicolon, "Expect ';' after expression statement.")?;
+        Ok(Stmt::Expr(expr))
+    }
+
+    pub fn expression(&mut self) -> ParseResult<Expr> {
         self.equality()
     }
 
@@ -316,6 +364,6 @@ impl Parser {
             return Ok(Expr::Grouping(Box::new(expr)));
         }
 
-        panic!("Expected expression.");
+        Err(ParseError::MissingExpr)
     }
 }

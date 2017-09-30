@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::ops;
 use std::result;
 
-use parser::{BinOp, Expr, UnaryOp, Value};
+use parser::{BinOp, Expr, UnaryOp, Value, Stmt};
 
 #[derive(Debug)]
 pub enum Error {
@@ -18,6 +18,26 @@ pub struct Interpreter;
 impl Interpreter {
     pub fn new() -> Self {
         Self {}
+    }
+
+    pub fn execute(&mut self, stmts: Vec<Stmt>) -> Result<()> {
+        for stmt in stmts {
+            self.exec_stmt(stmt)?;
+        }
+        Ok(())
+    }
+
+    fn exec_stmt(&mut self, stmt: Stmt) -> Result<()> {
+        match stmt {
+            Stmt::Expr(expr) => {
+                self.evaluate(expr)?;
+                Ok(())
+            }
+            Stmt::Print(expr) => {
+                println!("{}", self.evaluate(expr)?);
+                Ok(())
+            }
+        }
     }
 
     pub fn evaluate(&self, expr: Expr) -> ValueResult {

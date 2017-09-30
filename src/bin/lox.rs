@@ -46,22 +46,34 @@ fn main() {
             }
         }
 
-        println!("Tokens: {:?}", tokens);
+        // println!("Tokens: {:?}", tokens);
 
-        let mut parser = Parser::new(tokens);
-        match parser.parse() {
-            Ok(expr) => {
-                println!("Expr: {}", expr);
-
-                let interpreter = Interpreter::new();
-                match interpreter.evaluate(expr) {
-                    Ok(value) => println!("Value: {}", value),
-                    Err(e) => eprintln!("Interpreter error: {:?}", e),
+        let ntokens = tokens.len();
+        if ntokens >= 2 && tokens[ntokens - 2] != Token::Semicolon {
+            // Evaluate a single expr
+            let mut parser = Parser::new(tokens);
+            match parser.expression() {
+                Ok(expr) => {
+                    let interpreter = Interpreter::new();
+                    match interpreter.evaluate(expr) {
+                        Ok(value) => println!("{}", value),
+                        Err(e) => eprintln!("Error evaluating expression: {:?}", e),
+                    }
                 }
+                Err(e) => eprintln!("Parse error: {}", e),
             }
-            Err(e) => eprintln!("Parse error: {:?}", e),
+        } else {
+            // Evaluate a list of stmts
+            let mut parser = Parser::new(tokens);
+            match parser.parse() {
+                Ok(stmts) => {
+                    let mut interpreter = Interpreter::new();
+                    if let Err(e) = interpreter.execute(stmts) {
+                        eprintln!("Interpreter error: {:?}", e);
+                    }
+                }
+                Err(e) => eprintln!("Parse error: {}", e),
+            }
         }
-
-        println!("");
     }
 }

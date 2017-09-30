@@ -62,7 +62,7 @@ pub enum Value {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Value::Str(ref s) => write!(f, "{}", s),
+            Value::Str(ref s) => write!(f, "\"{}\"", s),
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
@@ -91,7 +91,7 @@ impl fmt::Display for Expr {
 
 #[derive(Debug)]
 pub enum ParseError {
-    UnexpectedToken,
+    UnexpectedToken(String),
 }
 
 type ParseResult<T> = Result<T, ParseError>;
@@ -103,10 +103,7 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self {
-            tokens,
-            pos: 0,
-        }
+        Self { tokens, pos: 0 }
     }
 
     pub fn parse(&mut self) -> ParseResult<Expr> {
@@ -179,7 +176,7 @@ impl Parser {
             return Ok(());
         }
 
-        Err(ParseError::UnexpectedToken)
+        Err(ParseError::UnexpectedToken(message.into()))
     }
 
     fn synchronize(&mut self) {
@@ -192,13 +189,13 @@ impl Parser {
 
             match *self.peek() {
                 Token::Class |
-                    Token::Fun |
-                    Token::Var |
-                    Token::For |
-                    Token::If |
-                    Token::While |
-                    Token::Print |
-                    Token::Return => return,
+                Token::Fun |
+                Token::Var |
+                Token::For |
+                Token::If |
+                Token::While |
+                Token::Print |
+                Token::Return => return,
                 _ => {}
             }
 
@@ -229,7 +226,12 @@ impl Parser {
     fn comparison(&mut self) -> ParseResult<Expr> {
         let mut expr = self.addition()?;
 
-        while self.advance_if(vec![Token::Greater, Token::GreaterEqual, Token::Less, Token::LessEqual]) {
+        while self.advance_if(vec![
+            Token::Greater,
+            Token::GreaterEqual,
+            Token::Less,
+            Token::LessEqual,
+        ]) {
             let op = match *self.previous() {
                 Token::Greater => BinOp::Greater,
                 Token::GreaterEqual => BinOp::GreaterEqual,

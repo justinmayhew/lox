@@ -4,6 +4,7 @@ use std::io::{self, Write};
 
 use lox::parser::*;
 use lox::scanner::*;
+use lox::interpreter::*;
 
 fn main() {
     // let expr = Expr::Binary(
@@ -34,11 +35,7 @@ fn main() {
         loop {
             match scanner.next_token() {
                 Ok(token) => {
-                    let mut stop = false;
-
-                    if token == Token::Eof {
-                        stop = true;
-                    }
+                    let stop = token == Token::Eof;
                     tokens.push(token);
 
                     if stop {
@@ -53,7 +50,15 @@ fn main() {
 
         let mut parser = Parser::new(tokens);
         match parser.parse() {
-            Ok(expr) => println!("Expr: {}", expr),
+            Ok(expr) => {
+                println!("Expr: {}", expr);
+
+                let interpreter = Interpreter::new();
+                match interpreter.evaluate(expr) {
+                    Ok(value) => println!("Value: {}", value),
+                    Err(e) => eprintln!("Interpreter error: {:?}", e),
+                }
+            }
             Err(e) => eprintln!("Parse error: {:?}", e),
         }
 

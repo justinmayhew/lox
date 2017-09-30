@@ -1,7 +1,7 @@
 use std::num::ParseIntError;
 use std::str::Chars;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Token {
     LeftParen,
     RightParen,

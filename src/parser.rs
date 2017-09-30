@@ -104,14 +104,14 @@ pub enum Stmt {
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedToken(String),
-    MissingExpr,
+    MissingExpr(Token),
 }
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ParseError::UnexpectedToken(ref msg) => write!(f, "Unexpected token: {}", msg),
-            ParseError::MissingExpr => write!(f, "Missing expression"),
+            ParseError::MissingExpr(ref token) => write!(f, "Expected expression, found {:?}", token),
         }
     }
 }
@@ -364,6 +364,6 @@ impl Parser {
             return Ok(Expr::Grouping(Box::new(expr)));
         }
 
-        Err(ParseError::MissingExpr)
+        Err(ParseError::MissingExpr(self.peek().clone()))
     }
 }

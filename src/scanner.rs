@@ -75,6 +75,26 @@ impl<'s> Scanner<'s> {
         }
     }
 
+    pub fn scan_all(&mut self) -> Vec<Token> {
+        let mut tokens = Vec::new();
+
+        loop {
+            match self.next_token() {
+                Ok(token) => {
+                    let stop = token == Token::Eof;
+                    tokens.push(token);
+
+                    if stop {
+                        break;
+                    }
+                }
+                Err(e) => panic!("Error scanning: {:?}", e),
+            }
+        }
+
+        tokens
+    }
+
     pub fn next_token(&mut self) -> ScanResult<Token> {
         loop {
             self.eat_whitespace();

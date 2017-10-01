@@ -1,6 +1,10 @@
 extern crate lox;
 extern crate rustyline;
 
+use std::env;
+use std::fs::File;
+use std::io::Read;
+
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
@@ -11,6 +15,35 @@ use lox::interpreter::*;
 static HISTORY_FILE: &'static str = ".lox_history";
 
 fn main() {
+    for arg in env::args().skip(1) {
+        // The first argument (if present) gets run as a script.
+        execute_file(arg);
+        return;
+    }
+
+    // Otherwise we're running the REPL.
+    repl();
+}
+
+fn execute_file(filename: String) {
+    // Get the source code.
+    let mut file = File::open(&filename).expect("file not found");
+    let mut src = String::new();
+    file.read_to_string(&mut src).expect("error reading file");
+
+    // Lex the tokens.
+    let mut scanner = Scanner::new(&src);
+    let tokens = scanner.scan_all();
+
+    // Parse the list of statements.
+    let mut parser = Parser::new(tokens);
+    let stmts = parser.parse().expect("error parsing file");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.execute(stmts).expect("error executing program");
+}
+
+fn repl() {
     let mut interpreter = Interpreter::new();
 
     let mut rl = Editor::<()>::new();
@@ -22,7 +55,7 @@ fn main() {
         match rl.readline("> ") {
             Ok(line) => {
                 rl.add_history_entry(&line);
-                run(&mut interpreter, line);
+                execute_line(&mut interpreter, line);
             }
             Err(ReadlineError::Interrupted) |
             Err(ReadlineError::Eof) => {
@@ -38,23 +71,9 @@ fn main() {
     rl.save_history(HISTORY_FILE).unwrap();
 }
 
-fn run(interpreter: &mut Interpreter, line: String) {
+fn execute_line(interpreter: &mut Interpreter, line: String) {
     let mut scanner = Scanner::new(&line);
-    let mut tokens = Vec::new();
-
-    loop {
-        match scanner.next_token() {
-            Ok(token) => {
-                let stop = token == Token::Eof;
-                tokens.push(token);
-
-                if stop {
-                    break;
-                }
-            }
-            Err(e) => panic!("Error scanning: {:?}", e),
-        }
-    }
+    let tokens = scanner.scan_all();
 
     let ntokens = tokens.len();
     if ntokens >= 2 && tokens[ntokens - 2] != Token::Semicolon {

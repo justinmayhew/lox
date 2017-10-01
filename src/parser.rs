@@ -120,10 +120,18 @@ pub enum ParseError {
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ParseError::UnexpectedToken(ref token, ref msg) => write!(f, "{}: Next token: {:?}", msg, token),
-            ParseError::MissingExpr(ref token) => write!(f, "Expected expression, found {:?}", token),
-            ParseError::ExpectedIdentifier(ref token) => write!(f, "Expected identifier, found {:?}", token),
-            ParseError::InvalidAssignment(ref expr) => write!(f, "Invalid assignment target {}", expr),
+            ParseError::UnexpectedToken(ref token, ref msg) => {
+                write!(f, "{}: Next token: {:?}", msg, token)
+            }
+            ParseError::MissingExpr(ref token) => {
+                write!(f, "Expected expression, found {:?}", token)
+            }
+            ParseError::ExpectedIdentifier(ref token) => {
+                write!(f, "Expected identifier, found {:?}", token)
+            }
+            ParseError::InvalidAssignment(ref expr) => {
+                write!(f, "Invalid assignment target {}", expr)
+            }
         }
     }
 }
@@ -230,7 +238,10 @@ impl Parser {
             return Ok(());
         }
 
-        Err(ParseError::UnexpectedToken(self.peek().clone(), message.into()))
+        Err(ParseError::UnexpectedToken(
+            self.peek().clone(),
+            message.into(),
+        ))
     }
 
     fn consume_identifier(&mut self) -> ParseResult<String> {

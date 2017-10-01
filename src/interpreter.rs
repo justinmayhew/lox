@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::ops;
 use std::result;
 
-use parser::{BinOp, Expr, UnaryOp, Value, Stmt};
+use parser::{BinOp, Expr, Stmt, UnaryOp, Value};
 
 #[derive(Debug)]
 pub enum Error {
@@ -67,12 +67,14 @@ impl Interpreter {
                     BinOp::Star => left * right,
                     BinOp::Slash => left / right,
 
-                    BinOp::BangEqual => Ok(Value::Bool(eq(left, right)?)),
+                    BinOp::BangEqual => Ok(Value::Bool(!eq(left, right)?)),
                     BinOp::EqualEqual => Ok(Value::Bool(eq(left, right)?)),
                     BinOp::Greater => Ok(Value::Bool(cmp(left, right)? == Ordering::Greater)),
                     BinOp::GreaterEqual => {
                         let ord = cmp(left, right)?;
-                        Ok(Value::Bool(ord == Ordering::Greater || ord == Ordering::Equal))
+                        Ok(Value::Bool(
+                            ord == Ordering::Greater || ord == Ordering::Equal,
+                        ))
                     }
                     BinOp::Less => Ok(Value::Bool(cmp(left, right)? == Ordering::Less)),
                     BinOp::LessEqual => {
@@ -94,12 +96,10 @@ impl Interpreter {
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(value))),
                 }
             }
-            Expr::Var(name) => {
-                match self.env.get(&name) {
-                    Some(value) => Ok(value.clone()),
-                    None => Err(Error::UndefinedVar(name)),
-                }
-            }
+            Expr::Var(name) => match self.env.get(&name) {
+                Some(value) => Ok(value.clone()),
+                None => Err(Error::UndefinedVar(name)),
+            },
             Expr::VarAssign(name, expr) => {
                 let value = self.evaluate(*expr)?;
 
@@ -129,7 +129,9 @@ impl ops::Add for Value {
         match (self, rhs) {
             (Value::Int(left), Value::Int(right)) => Ok(Value::Int(left + right)),
             (Value::Str(left), Value::Str(right)) => Ok(Value::Str(left + &right)),
-            (left, right) => Err(Error::TypeError(format!("Cannot add {:?} to {:?}", left, right))),
+            (left, right) => Err(Error::TypeError(
+                format!("Cannot add {:?} to {:?}", left, right),
+            )),
         }
     }
 }
@@ -139,7 +141,9 @@ impl ops::Sub for Value {
     fn sub(self, rhs: Value) -> ValueResult {
         match (self, rhs) {
             (Value::Int(left), Value::Int(right)) => Ok(Value::Int(left - right)),
-            (left, right) => Err(Error::TypeError(format!("Cannot subtract {:?} to {:?}", left, right))),
+            (left, right) => Err(Error::TypeError(
+                format!("Cannot subtract {:?} to {:?}", left, right),
+            )),
         }
     }
 }
@@ -149,7 +153,9 @@ impl ops::Mul for Value {
     fn mul(self, rhs: Value) -> ValueResult {
         match (self, rhs) {
             (Value::Int(left), Value::Int(right)) => Ok(Value::Int(left * right)),
-            (left, right) => Err(Error::TypeError(format!("Cannot multiply {:?} to {:?}", left, right))),
+            (left, right) => Err(Error::TypeError(
+                format!("Cannot multiply {:?} to {:?}", left, right),
+            )),
         }
     }
 }
@@ -160,7 +166,9 @@ impl ops::Div for Value {
         match (self, rhs) {
             (Value::Int(_), Value::Int(0)) => Err(Error::DivideByZero),
             (Value::Int(left), Value::Int(right)) => Ok(Value::Int(left / right)),
-            (left, right) => Err(Error::TypeError(format!("Cannot divide {:?} to {:?}", left, right))),
+            (left, right) => Err(Error::TypeError(
+                format!("Cannot divide {:?} to {:?}", left, right),
+            )),
         }
     }
 }
@@ -169,7 +177,9 @@ fn eq(left: Value, right: Value) -> Result<bool> {
     match (left, right) {
         (Value::Int(left), Value::Int(right)) => Ok(left == right),
         (Value::Str(ref left), Value::Str(ref right)) => Ok(left == right),
-        (left, right) => Err(Error::TypeError(format!("Cannot compare {:?} to {:?}", left, right))),
+        (left, right) => Err(Error::TypeError(
+            format!("Cannot compare {:?} to {:?}", left, right),
+        )),
     }
 }
 
@@ -177,6 +187,8 @@ fn cmp(left: Value, right: Value) -> Result<Ordering> {
     match (left, right) {
         (Value::Int(left), Value::Int(right)) => Ok(left.cmp(&right)),
         (Value::Str(left), Value::Str(right)) => Ok(left.cmp(&right)),
-        (left, right) => Err(Error::TypeError(format!("Cannot compare {:?} to {:?}", left, right))),
+        (left, right) => Err(Error::TypeError(
+            format!("Cannot compare {:?} to {:?}", left, right),
+        )),
     }
 }

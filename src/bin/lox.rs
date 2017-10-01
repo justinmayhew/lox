@@ -15,19 +15,16 @@ use lox::interpreter::*;
 static HISTORY_FILE: &'static str = ".lox_history";
 
 fn main() {
-    for arg in env::args().skip(1) {
-        // The first argument (if present) gets run as a script.
-        execute_file(arg);
-        return;
+    if let Some(filename) = env::args().nth(1) {
+        execute_file(&filename);
+    } else {
+        repl();
     }
-
-    // Otherwise we're running the REPL.
-    repl();
 }
 
-fn execute_file(filename: String) {
+fn execute_file(filename: &str) {
     // Get the source code.
-    let mut file = File::open(&filename).expect("file not found");
+    let mut file = File::open(filename).expect("file not found");
     let mut src = String::new();
     file.read_to_string(&mut src).expect("error reading file");
 
@@ -47,7 +44,7 @@ fn repl() {
     let mut interpreter = Interpreter::new();
 
     let mut rl = Editor::<()>::new();
-    if let Err(_) = rl.load_history(HISTORY_FILE) {
+    if rl.load_history(HISTORY_FILE).is_err() {
         println!("No previous history.");
     }
 
@@ -55,15 +52,12 @@ fn repl() {
         match rl.readline("> ") {
             Ok(line) => {
                 rl.add_history_entry(&line);
-                execute_line(&mut interpreter, line);
+                execute_line(&mut interpreter, &line);
             }
-            Err(ReadlineError::Interrupted) |
-            Err(ReadlineError::Eof) => {
-                break
-            },
+            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => break,
             Err(err) => {
                 println!("Error: {:?}", err);
-                break
+                break;
             }
         }
     }
@@ -71,8 +65,8 @@ fn repl() {
     rl.save_history(HISTORY_FILE).unwrap();
 }
 
-fn execute_line(interpreter: &mut Interpreter, line: String) {
-    let mut scanner = Scanner::new(&line);
+fn execute_line(interpreter: &mut Interpreter, line: &str) {
+    let mut scanner = Scanner::new(line);
     let tokens = scanner.scan_all();
 
     let ntokens = tokens.len();
@@ -80,23 +74,19 @@ fn execute_line(interpreter: &mut Interpreter, line: String) {
         // Evaluate a single expr
         let mut parser = Parser::new(tokens);
         match parser.expression() {
-            Ok(expr) => {
-                match interpreter.evaluate(expr) {
-                    Ok(value) => println!("{}", value),
-                    Err(e) => eprintln!("Error evaluating expression: {:?}", e),
-                }
-            }
+            Ok(expr) => match interpreter.evaluate(expr) {
+                Ok(value) => println!("{}", value),
+                Err(e) => eprintln!("Error evaluating expression: {:?}", e),
+            },
             Err(e) => eprintln!("Parse error: {}", e),
         }
     } else {
         // Evaluate a list of stmts
         let mut parser = Parser::new(tokens);
         match parser.parse() {
-            Ok(stmts) => {
-                if let Err(e) = interpreter.execute(stmts) {
-                    eprintln!("Interpreter error: {:?}", e);
-                }
-            }
+            Ok(stmts) => if let Err(e) = interpreter.execute(stmts) {
+                eprintln!("Interpreter error: {:?}", e);
+            },
             Err(e) => eprintln!("Parse error: {}", e),
         }
     }

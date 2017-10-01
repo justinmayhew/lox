@@ -1,0 +1,9 @@
+var name = "Outside";
+
+print name;
+{
+  var name = "Inside";
+  print name;
+}
+
+print name;

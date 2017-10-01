@@ -107,6 +107,8 @@ pub enum Stmt {
     Print(Expr),
     /// A variable declaration.
     VarDecl(String, Option<Expr>),
+    /// A block statement.
+    Block(Vec<Stmt>),
 }
 
 #[derive(Debug)]
@@ -289,7 +291,8 @@ impl Parser {
             self.statement()
         };
 
-        if result.is_err() {
+        if let Err(ref e) = result {
+            eprintln!("Synchronizing due to {}...", e);
             self.synchronize();
         }
 
@@ -313,6 +316,8 @@ impl Parser {
     fn statement(&mut self) -> ParseResult<Stmt> {
         if self.advance_if(vec![Token::Print]) {
             self.print_statement()
+        } else if self.advance_if(vec![Token::LeftBrace]) {
+            Ok(Stmt::Block(self.block_statement()?))
         } else {
             self.expression_statement()
         }
@@ -322,6 +327,17 @@ impl Parser {
         let expr = self.expression()?;
         self.consume(Token::Semicolon, "Expect ';' after print statement.")?;
         Ok(Stmt::Print(expr))
+    }
+
+    fn block_statement(&mut self) -> ParseResult<Vec<Stmt>> {
+        let mut stmts = Vec::new();
+
+        while !self.check(&Token::RightBrace) && !self.is_at_end() {
+            stmts.push(self.declaration()?);
+        }
+
+        self.consume(Token::RightBrace, "Expect '}' after block.")?;
+        Ok(stmts)
     }
 
     fn expression_statement(&mut self) -> ParseResult<Stmt> {

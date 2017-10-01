@@ -1,9 +1,10 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::mem;
 use std::ops;
 use std::result;
 
 use parser::{BinOp, Expr, Stmt, UnaryOp, Value};
+use environment::Environment;
 
 #[derive(Debug)]
 pub enum Error {
@@ -16,13 +17,13 @@ type Result<T> = result::Result<T, Error>;
 type ValueResult = Result<Value>;
 
 pub struct Interpreter {
-    env: HashMap<String, Value>,
+    env: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Self {
-            env: HashMap::new(),
+            env: Environment::new(None),
         }
     }
 
@@ -49,8 +50,29 @@ impl Interpreter {
                     None => Value::Nil,
                 };
 
-                self.env.insert(name, value);
+                self.env.define(name, value);
                 Ok(())
+            }
+            Stmt::Block(stmts) => {
+                // Set up new environment for this block.
+                let previous = mem::replace(&mut self.env, Environment::new(None));
+                self.env.set_enclosing(previous);
+
+                let mut result = Ok(());
+
+                for stmt in stmts {
+                    result = self.exec_stmt(stmt);
+                    if result.is_err() {
+                        break;
+                    }
+                }
+
+                // Restore previous environment.
+                let mut env = mem::replace(&mut self.env, Environment::new(None));
+                let previous = env.pop_enclosing();
+                self.env = previous;
+
+                result
             }
         }
     }
@@ -103,11 +125,10 @@ impl Interpreter {
             Expr::VarAssign(name, expr) => {
                 let value = self.evaluate(*expr)?;
 
-                if !self.env.contains_key(&name) {
-                    Err(Error::UndefinedVar(name))
-                } else {
-                    self.env.insert(name, value.clone());
+                if self.env.assign(&name, value.clone()) {
                     Ok(value)
+                } else {
+                    Err(Error::UndefinedVar(name))
                 }
             }
         }

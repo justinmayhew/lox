@@ -55,7 +55,7 @@ impl Interpreter {
         }
     }
 
-    pub fn evaluate(&self, expr: Expr) -> ValueResult {
+    pub fn evaluate(&mut self, expr: Expr) -> ValueResult {
         match expr {
             Expr::Binary(left_expr, op, right_expr) => {
                 let left = self.evaluate(*left_expr)?;
@@ -98,6 +98,16 @@ impl Interpreter {
                 match self.env.get(&name) {
                     Some(value) => Ok(value.clone()),
                     None => Err(Error::UndefinedVar(name)),
+                }
+            }
+            Expr::VarAssign(name, expr) => {
+                let value = self.evaluate(*expr)?;
+
+                if !self.env.contains_key(&name) {
+                    Err(Error::UndefinedVar(name))
+                } else {
+                    self.env.insert(name, value.clone());
+                    Ok(value)
                 }
             }
         }

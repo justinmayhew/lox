@@ -80,8 +80,10 @@ pub enum Expr {
     Literal(Value),
     /// A unary expression, for example `!true`.
     Unary(UnaryOp, Box<Expr>),
-    /// A variable expression, for example `name`..
+    /// A variable expression, for example `name`.
     Var(String),
+    /// An assignment expression, for example `a = 5`.
+    VarAssign(String, Box<Expr>),
 }
 
 impl fmt::Display for Expr {
@@ -92,6 +94,7 @@ impl fmt::Display for Expr {
             Expr::Literal(ref value) => write!(f, "{}", value),
             Expr::Unary(op, ref expr) => write!(f, "({} {})", op, expr),
             Expr::Var(ref name) => write!(f, "{}", name),
+            Expr::VarAssign(ref name, ref expr) => write!(f, "{} = {}", name, expr),
         }
     }
 }
@@ -111,6 +114,7 @@ pub enum ParseError {
     UnexpectedToken(Token, String),
     MissingExpr(Token),
     ExpectedIdentifier(Token),
+    InvalidAssignment(Expr),
 }
 
 impl fmt::Display for ParseError {
@@ -119,6 +123,7 @@ impl fmt::Display for ParseError {
             ParseError::UnexpectedToken(ref token, ref msg) => write!(f, "{}: Next token: {:?}", msg, token),
             ParseError::MissingExpr(ref token) => write!(f, "Expected expression, found {:?}", token),
             ParseError::ExpectedIdentifier(ref token) => write!(f, "Expected identifier, found {:?}", token),
+            ParseError::InvalidAssignment(ref expr) => write!(f, "Invalid assignment target {}", expr),
         }
     }
 }
@@ -315,7 +320,23 @@ impl Parser {
     }
 
     pub fn expression(&mut self) -> ParseResult<Expr> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> ParseResult<Expr> {
+        let expr = self.equality()?;
+
+        if self.advance_if(vec![Token::Equal]) {
+            let value = self.assignment()?;
+
+            if let Expr::Var(ref name) = expr {
+                return Ok(Expr::VarAssign(name.clone(), Box::new(value)));
+            }
+
+            return Err(ParseError::InvalidAssignment(expr));
+        }
+
+        Ok(expr)
     }
 
     fn equality(&mut self) -> ParseResult<Expr> {

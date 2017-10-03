@@ -1,0 +1,13 @@
+if (true) print "1";
+if (false) print "2";
+
+if (true and true) print "3";
+if (true and false) print "4";
+if (false and true) print "5";
+
+print true and true;
+print false and true;
+print true and false;
+
+print 0 and 1;
+print 1 and 0;

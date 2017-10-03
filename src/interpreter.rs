@@ -3,7 +3,7 @@ use std::mem;
 use std::ops;
 use std::result;
 
-use parser::{BinOp, Expr, Stmt, UnaryOp, Value};
+use parser::{BinOp, Expr, LogicOp, Stmt, UnaryOp, Value};
 use environment::Environment;
 
 #[derive(Debug)]
@@ -75,7 +75,7 @@ impl Interpreter {
                 result
             }
             Stmt::If(condition, then_branch, else_branch) => {
-                if is_truthy(self.evaluate(condition)?) {
+                if is_truthy(&self.evaluate(condition)?) {
                     self.exec_stmt(*then_branch)?;
                 } else if let Some(branch) = else_branch {
                     self.exec_stmt(*branch)?;
@@ -113,6 +113,22 @@ impl Interpreter {
                     }
                 }
             }
+            Expr::Logical(left_expr, op, right_expr) => {
+                let left = self.evaluate(*left_expr)?;
+
+                match op {
+                    LogicOp::And => if is_truthy(&left) {
+                        self.evaluate(*right_expr)
+                    } else {
+                        Ok(left)
+                    },
+                    LogicOp::Or => if is_truthy(&left) {
+                        Ok(left)
+                    } else {
+                        self.evaluate(*right_expr)
+                    },
+                }
+            }
             Expr::Grouping(expr) => self.evaluate(*expr),
             Expr::Literal(value) => Ok(value),
             Expr::Unary(op, expr) => {
@@ -123,7 +139,7 @@ impl Interpreter {
                         Value::Int(n) => Ok(Value::Int(-n)),
                         val => panic!("Cannot use unary - on {:?}", val),
                     },
-                    UnaryOp::Bang => Ok(Value::Bool(!is_truthy(value))),
+                    UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
                 }
             }
             Expr::Var(name) => match self.env.get(&name) {
@@ -143,9 +159,9 @@ impl Interpreter {
     }
 }
 
-fn is_truthy(value: Value) -> bool {
-    match value {
-        Value::Str(s) => !s.is_empty(),
+fn is_truthy(value: &Value) -> bool {
+    match *value {
+        Value::Str(ref s) => !s.is_empty(),
         Value::Int(n) => n != 0,
         Value::Bool(b) => b,
         Value::Nil => false,

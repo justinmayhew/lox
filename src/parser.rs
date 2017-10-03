@@ -41,11 +41,27 @@ pub enum UnaryOp {
     Minus,
     Bang,
 }
+
 impl fmt::Display for UnaryOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match *self {
             UnaryOp::Minus => "-",
             UnaryOp::Bang => "!",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum LogicOp {
+    And,
+    Or,
+}
+impl fmt::Display for LogicOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = match *self {
+            LogicOp::And => "&&",
+            LogicOp::Or => "||",
         };
         write!(f, "{}", s)
     }
@@ -74,6 +90,8 @@ impl fmt::Display for Value {
 pub enum Expr {
     /// A binary expression, for example `1 + 2`.
     Binary(Box<Expr>, BinOp, Box<Expr>),
+    /// A logical expression, for example `foo == bar && foo == baz`.
+    Logical(Box<Expr>, LogicOp, Box<Expr>),
     /// A grouping expression, for example `(1)`.
     Grouping(Box<Expr>),
     /// A literal expression, for example `1` or `"foo"`.
@@ -90,6 +108,7 @@ impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Expr::Binary(ref left, op, ref right) => write!(f, "({} {} {})", op, left, right),
+            Expr::Logical(ref left, op, ref right) => write!(f, "({} {} {})", op, left, right),
             Expr::Grouping(ref expr) => write!(f, "(group {})", expr),
             Expr::Literal(ref value) => write!(f, "{}", value),
             Expr::Unary(op, ref expr) => write!(f, "({} {})", op, expr),
@@ -371,7 +390,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> ParseResult<Expr> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if self.advance_if(vec![Token::Equal]) {
             let value = self.assignment()?;
@@ -381,6 +400,28 @@ impl Parser {
             }
 
             return Err(ParseError::InvalidAssignment(expr));
+        }
+
+        Ok(expr)
+    }
+
+    fn or(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.and()?;
+
+        while self.advance_if(vec![Token::Or]) {
+            let right = self.and()?;
+            expr = Expr::Logical(Box::new(expr), LogicOp::Or, Box::new(right));
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.equality()?;
+
+        while self.advance_if(vec![Token::And]) {
+            let right = self.equality()?;
+            expr = Expr::Logical(Box::new(expr), LogicOp::And, Box::new(right));
         }
 
         Ok(expr)

@@ -109,6 +109,8 @@ pub enum Stmt {
     VarDecl(String, Option<Expr>),
     /// A block statement.
     Block(Vec<Stmt>),
+    /// An if statement.
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
 }
 
 #[derive(Debug)]
@@ -318,6 +320,8 @@ impl Parser {
             self.print_statement()
         } else if self.advance_if(vec![Token::LeftBrace]) {
             Ok(Stmt::Block(self.block_statement()?))
+        } else if self.advance_if(vec![Token::If]) {
+            self.if_statement()
         } else {
             self.expression_statement()
         }
@@ -338,6 +342,22 @@ impl Parser {
 
         self.consume(Token::RightBrace, "Expect '}' after block.")?;
         Ok(stmts)
+    }
+
+    fn if_statement(&mut self) -> ParseResult<Stmt> {
+        self.consume(Token::LeftParen, "Expect '(' after if.")?;
+        let condition = self.expression()?;
+        self.consume(Token::RightParen, "Expect ')' after if condition.")?;
+        let then_branch = Box::new(self.statement()?);
+
+        // Check for the optional else.
+        let else_branch = if self.advance_if(vec![Token::Else]) {
+            Some(Box::new(self.statement()?))
+        } else {
+            None
+        };
+
+        Ok(Stmt::If(condition, then_branch, else_branch))
     }
 
     fn expression_statement(&mut self) -> ParseResult<Stmt> {

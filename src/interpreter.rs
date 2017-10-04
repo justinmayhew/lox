@@ -27,33 +27,33 @@ impl Interpreter {
         }
     }
 
-    pub fn execute(&mut self, stmts: Vec<Stmt>) -> Result<()> {
+    pub fn execute(&mut self, stmts: &[Stmt]) -> Result<()> {
         for stmt in stmts {
             self.exec_stmt(stmt)?;
         }
         Ok(())
     }
 
-    fn exec_stmt(&mut self, stmt: Stmt) -> Result<()> {
-        match stmt {
-            Stmt::Expr(expr) => {
+    fn exec_stmt(&mut self, stmt: &Stmt) -> Result<()> {
+        match *stmt {
+            Stmt::Expr(ref expr) => {
                 self.evaluate(expr)?;
                 Ok(())
             }
-            Stmt::Print(expr) => {
+            Stmt::Print(ref expr) => {
                 println!("{}", self.evaluate(expr)?);
                 Ok(())
             }
-            Stmt::VarDecl(name, initializer) => {
-                let value = match initializer {
-                    Some(expr) => self.evaluate(expr)?,
+            Stmt::VarDecl(ref name, ref initializer) => {
+                let value = match *initializer {
+                    Some(ref expr) => self.evaluate(expr)?,
                     None => Value::Nil,
                 };
 
-                self.env.define(name, value);
+                self.env.define(name.clone(), value);
                 Ok(())
             }
-            Stmt::Block(stmts) => {
+            Stmt::Block(ref stmts) => {
                 // Set up new environment for this block.
                 let previous = mem::replace(&mut self.env, Environment::new(None));
                 self.env.set_enclosing(previous);
@@ -74,22 +74,28 @@ impl Interpreter {
 
                 result
             }
-            Stmt::If(condition, then_branch, else_branch) => {
+            Stmt::If(ref condition, ref then_branch, ref else_branch) => {
                 if is_truthy(&self.evaluate(condition)?) {
-                    self.exec_stmt(*then_branch)?;
-                } else if let Some(branch) = else_branch {
-                    self.exec_stmt(*branch)?;
+                    self.exec_stmt(&*then_branch)?;
+                } else if let Some(ref branch) = *else_branch {
+                    self.exec_stmt(&*branch)?;
+                }
+                Ok(())
+            }
+            Stmt::While(ref condition, ref body) => {
+                while is_truthy(&self.evaluate(condition)?) {
+                    self.exec_stmt(body)?;
                 }
                 Ok(())
             }
         }
     }
 
-    pub fn evaluate(&mut self, expr: Expr) -> ValueResult {
-        match expr {
-            Expr::Binary(left_expr, op, right_expr) => {
-                let left = self.evaluate(*left_expr)?;
-                let right = self.evaluate(*right_expr)?;
+    pub fn evaluate(&mut self, expr: &Expr) -> ValueResult {
+        match *expr {
+            Expr::Binary(ref left_expr, op, ref right_expr) => {
+                let left = self.evaluate(&*left_expr)?;
+                let right = self.evaluate(&*right_expr)?;
 
                 match op {
                     BinOp::Plus => left + right,
@@ -113,26 +119,26 @@ impl Interpreter {
                     }
                 }
             }
-            Expr::Logical(left_expr, op, right_expr) => {
-                let left = self.evaluate(*left_expr)?;
+            Expr::Logical(ref left_expr, op, ref right_expr) => {
+                let left = self.evaluate(&*left_expr)?;
 
                 match op {
                     LogicOp::And => if is_truthy(&left) {
-                        self.evaluate(*right_expr)
+                        self.evaluate(&*right_expr)
                     } else {
                         Ok(left)
                     },
                     LogicOp::Or => if is_truthy(&left) {
                         Ok(left)
                     } else {
-                        self.evaluate(*right_expr)
+                        self.evaluate(&*right_expr)
                     },
                 }
             }
-            Expr::Grouping(expr) => self.evaluate(*expr),
-            Expr::Literal(value) => Ok(value),
-            Expr::Unary(op, expr) => {
-                let value = self.evaluate(*expr)?;
+            Expr::Grouping(ref expr) => self.evaluate(&*expr),
+            Expr::Literal(ref value) => Ok(value.clone()),
+            Expr::Unary(op, ref expr) => {
+                let value = self.evaluate(&*expr)?;
 
                 match op {
                     UnaryOp::Minus => match value {
@@ -142,17 +148,17 @@ impl Interpreter {
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
                 }
             }
-            Expr::Var(name) => match self.env.get(&name) {
+            Expr::Var(ref name) => match self.env.get(name) {
                 Some(value) => Ok(value.clone()),
-                None => Err(Error::UndefinedVar(name)),
+                None => Err(Error::UndefinedVar(name.clone())),
             },
-            Expr::VarAssign(name, expr) => {
-                let value = self.evaluate(*expr)?;
+            Expr::VarAssign(ref name, ref expr) => {
+                let value = self.evaluate(&*expr)?;
 
-                if self.env.assign(&name, value.clone()) {
+                if self.env.assign(name, value.clone()) {
                     Ok(value)
                 } else {
-                    Err(Error::UndefinedVar(name))
+                    Err(Error::UndefinedVar(name.clone()))
                 }
             }
         }

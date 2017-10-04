@@ -10,7 +10,11 @@ def exec(path):
         expected = f.read()
 
     output = subprocess.check_output(['target/release/lox', path]).decode('utf-8')
-    assert output == expected
+
+    if output != expected:
+        print(f"Output: '{output}'")
+        print(f"Expected: '{expected}'")
+        raise AssertionError
 
 subprocess.run(['cargo', 'build', '--release'])
 

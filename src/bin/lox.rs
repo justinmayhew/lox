@@ -37,7 +37,7 @@ fn execute_file(filename: &str) {
     let stmts = parser.parse().expect("error parsing file");
 
     let mut interpreter = Interpreter::new();
-    interpreter.execute(stmts).expect("error executing program");
+    interpreter.execute(&stmts).expect("error executing program");
 }
 
 fn repl() {
@@ -74,7 +74,7 @@ fn execute_line(interpreter: &mut Interpreter, line: &str) {
         // Evaluate a single expr
         let mut parser = Parser::new(tokens);
         match parser.expression() {
-            Ok(expr) => match interpreter.evaluate(expr) {
+            Ok(expr) => match interpreter.evaluate(&expr) {
                 Ok(value) => println!("{}", value),
                 Err(e) => eprintln!("Error evaluating expression: {:?}", e),
             },
@@ -84,7 +84,7 @@ fn execute_line(interpreter: &mut Interpreter, line: &str) {
         // Evaluate a list of stmts
         let mut parser = Parser::new(tokens);
         match parser.parse() {
-            Ok(stmts) => if let Err(e) = interpreter.execute(stmts) {
+            Ok(stmts) => if let Err(e) = interpreter.execute(&stmts) {
                 eprintln!("Interpreter error: {:?}", e);
             },
             Err(e) => eprintln!("Parse error: {}", e),

@@ -86,7 +86,7 @@ impl fmt::Display for Value {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Expr {
     /// A binary expression, for example `1 + 2`.
     Binary(Box<Expr>, BinOp, Box<Expr>),
@@ -118,7 +118,7 @@ impl fmt::Display for Expr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Stmt {
     /// An expression statement.
     Expr(Expr),
@@ -130,6 +130,8 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     /// An if statement.
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    /// A while statement.
+    While(Expr, Box<Stmt>),
 }
 
 #[derive(Debug)]
@@ -341,6 +343,8 @@ impl Parser {
             Ok(Stmt::Block(self.block_statement()?))
         } else if self.advance_if(vec![Token::If]) {
             self.if_statement()
+        } else if self.advance_if(vec![Token::While]) {
+            self.while_statement()
         } else {
             self.expression_statement()
         }
@@ -377,6 +381,14 @@ impl Parser {
         };
 
         Ok(Stmt::If(condition, then_branch, else_branch))
+    }
+
+    fn while_statement(&mut self) -> ParseResult<Stmt> {
+        self.consume(Token::LeftParen, "Expect '(' after if.")?;
+        let condition = self.expression()?;
+        self.consume(Token::RightParen, "Expect ')' after if condition.")?;
+        let body = self.statement()?;
+        Ok(Stmt::While(condition, Box::new(body)))
     }
 
     fn expression_statement(&mut self) -> ParseResult<Stmt> {

@@ -37,7 +37,9 @@ fn execute_file(filename: &str) {
     let stmts = parser.parse().expect("error parsing file");
 
     let mut interpreter = Interpreter::new();
-    interpreter.execute(&stmts).expect("error executing program");
+    interpreter
+        .execute(&stmts)
+        .expect("error executing program");
 }
 
 fn repl() {

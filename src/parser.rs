@@ -345,6 +345,8 @@ impl Parser {
             self.if_statement()
         } else if self.advance_if(vec![Token::While]) {
             self.while_statement()
+        } else if self.advance_if(vec![Token::For]) {
+            self.for_statement()
         } else {
             self.expression_statement()
         }
@@ -384,11 +386,54 @@ impl Parser {
     }
 
     fn while_statement(&mut self) -> ParseResult<Stmt> {
-        self.consume(Token::LeftParen, "Expect '(' after if.")?;
+        self.consume(Token::LeftParen, "Expect '(' after while.")?;
         let condition = self.expression()?;
-        self.consume(Token::RightParen, "Expect ')' after if condition.")?;
+        self.consume(Token::RightParen, "Expect ')' after while condition.")?;
         let body = self.statement()?;
         Ok(Stmt::While(condition, Box::new(body)))
+    }
+
+    fn for_statement(&mut self) -> ParseResult<Stmt> {
+        self.consume(Token::LeftParen, "Expect '(' after for.")?;
+
+        let initializer = if self.advance_if(vec![Token::Var]) {
+            Some(self.var_declaration()?)
+        } else if self.advance_if(vec![Token::Semicolon]) {
+            None
+        } else {
+            // It has to be an expression statement.
+            Some(self.expression_statement()?)
+        };
+
+        let condition = if self.advance_if(vec![Token::Semicolon]) {
+            Expr::Literal(Value::Bool(true))
+        } else {
+            let condition = self.expression()?;
+            self.consume(Token::Semicolon, "Expect ';' after for condition.")?;
+            condition
+        };
+
+        let increment = if *self.peek() == Token::RightParen {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+
+        self.consume(Token::RightParen, "Expect ')' after for.")?;
+
+        let mut body = self.statement()?;
+
+        if let Some(increment) = increment {
+            body = Stmt::Block(vec![body, Stmt::Expr(increment)]);
+        }
+
+        body = Stmt::While(condition, Box::new(body));
+
+        if let Some(initializer) = initializer {
+            body = Stmt::Block(vec![initializer, body]);
+        }
+
+        Ok(body)
     }
 
     fn expression_statement(&mut self) -> ParseResult<Stmt> {

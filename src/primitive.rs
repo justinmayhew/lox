@@ -14,6 +14,7 @@ pub enum Value {
 
 #[derive(Debug)]
 pub enum Error {
+    Return(Value),
     TypeError(String),
     DivideByZero,
     UndefinedVar(String),

@@ -3,7 +3,7 @@ use time;
 use environment::Environment;
 use interpreter::Interpreter;
 use parser::Stmt;
-use primitive::{Value, ValueResult};
+use primitive::{Error, Value, ValueResult};
 use std::mem;
 
 pub trait LoxCallable {
@@ -69,7 +69,11 @@ impl LoxCallable for LoxFunction {
         let previous = env.pop_enclosing();
         interpreter.env = previous;
 
-        result.map(|_| Value::Nil)
+        match result {
+            Ok(()) => Ok(Value::Nil),
+            Err(Error::Return(value)) => Ok(value),
+            Err(e) => Err(e),
+        }
     }
 
     fn arity(&self) -> usize {

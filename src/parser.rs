@@ -115,6 +115,8 @@ pub enum Stmt {
     VarDecl(String, Option<Expr>),
     /// A function declaration.
     Fun(String, Vec<String>, Vec<Stmt>),
+    /// A return statement.
+    Return(Option<Expr>),
     /// A block statement.
     Block(Vec<Stmt>),
     /// An if statement.
@@ -368,6 +370,8 @@ impl Parser {
             self.while_statement()
         } else if self.advance_if(vec![Token::For]) {
             self.for_statement()
+        } else if self.advance_if(vec![Token::Return]) {
+            self.return_statement()
         } else {
             self.expression_statement()
         }
@@ -455,6 +459,18 @@ impl Parser {
         }
 
         Ok(body)
+    }
+
+    fn return_statement(&mut self) -> ParseResult<Stmt> {
+        let expr = if *self.peek() != Token::Semicolon {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(Token::Semicolon, "Expect ';' after return statement.")?;
+
+        Ok(Stmt::Return(expr))
     }
 
     fn expression_statement(&mut self) -> ParseResult<Stmt> {

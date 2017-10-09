@@ -54,6 +54,15 @@ impl Interpreter {
                     .define(name.clone(), Value::Fun(Rc::new(lox_function)));
                 Ok(())
             }
+            Stmt::Return(ref expr) => {
+                let value = if let Some(ref expr) = *expr {
+                    self.evaluate(expr)?
+                } else {
+                    Value::Nil
+                };
+
+                Err(Error::Return(value))
+            }
             Stmt::Block(ref stmts) => {
                 // Set up new environment for this block.
                 let previous = mem::replace(&mut self.env, Environment::new(None));

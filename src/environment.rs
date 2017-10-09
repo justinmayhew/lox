@@ -34,6 +34,17 @@ impl Environment {
         }
     }
 
+    pub fn assign_at(&mut self, key: &str, value: Value, hops: usize) {
+        if hops == 0 {
+            assert!(self.values.contains_key(key));
+            self.values.insert(key.into(), value);
+        } else if let Some(ref env) = self.enclosing {
+            env.borrow_mut().assign_at(key, value, hops - 1)
+        } else {
+            panic!("not enough environments to hop to");
+        }
+    }
+
     pub fn get(&self, key: &str) -> Option<Value> {
         self.values
             .get(key)
@@ -42,6 +53,16 @@ impl Environment {
                 Some(ref env) => env.borrow().get(key),
                 None => None,
             })
+    }
+
+    pub fn get_at(&self, key: &str, hops: usize) -> Value {
+        if hops == 0 {
+            self.get(key).expect("variable not defined")
+        } else if let Some(ref env) = self.enclosing {
+            env.borrow().get_at(key, hops - 1)
+        } else {
+            panic!("not enough environments to hop to");
+        }
     }
 
     pub fn set_enclosing(&mut self, enclosing: Rc<RefCell<Environment>>) {

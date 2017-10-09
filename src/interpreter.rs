@@ -4,6 +4,7 @@ use std::fmt;
 use std::mem;
 use std::ops;
 use std::rc::Rc;
+use std::usize;
 
 use environment::Environment;
 use parser::{BinOp, Expr, LogicOp, Stmt, UnaryOp};
@@ -11,6 +12,7 @@ use primitive::{Error, Result, Value, ValueResult};
 use callable::{Clock, LoxFunction};
 
 pub struct Interpreter {
+    globals: Rc<RefCell<Environment>>,
     pub env: Rc<RefCell<Environment>>,
 }
 
@@ -20,9 +22,10 @@ impl Interpreter {
 
         env.define("clock".into(), Value::Fun(Rc::new(Clock)));
 
-        Self {
-            env: Rc::new(RefCell::new(env)),
-        }
+        let env = Rc::new(RefCell::new(env));
+        let globals = Rc::clone(&env);
+
+        Self { globals, env }
     }
 
     pub fn execute(&mut self, stmts: &[Stmt]) -> Result<()> {
@@ -168,17 +171,31 @@ impl Interpreter {
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
                 }
             }
-            Expr::Var(ref name) => match self.env.borrow().get(name) {
-                Some(value) => Ok(value),
-                None => Err(Error::UndefinedVar(name.clone())),
-            },
-            Expr::VarAssign(ref name, ref expr) => {
+            Expr::Var(ref name, hops) => {
+                if hops == usize::MAX {
+                    // Global
+                    match self.globals.borrow().get(name) {
+                        Some(value) => Ok(value),
+                        None => Err(Error::UndefinedVar(name.clone())),
+                    }
+                } else {
+                    // Non-global
+                    let value = self.env.borrow().get_at(name, hops);
+                    Ok(value)
+                }
+            }
+            Expr::VarAssign(ref name, ref expr, hops) => {
                 let value = self.evaluate(expr)?;
 
-                if self.env.borrow_mut().assign(name, value.clone()) {
-                    Ok(value)
+                if hops == usize::MAX {
+                    if self.globals.borrow_mut().assign(name, value.clone()) {
+                        Ok(value)
+                    } else {
+                        Err(Error::UndefinedVar(name.clone()))
+                    }
                 } else {
-                    Err(Error::UndefinedVar(name.clone()))
+                    self.env.borrow_mut().assign_at(name, value.clone(), hops);
+                    Ok(value)
                 }
             }
             Expr::Call(ref callee, ref argument_exprs) => {

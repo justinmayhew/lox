@@ -1,4 +1,5 @@
 use std::fmt;
+use std::usize;
 
 use primitive::Value;
 use scanner::Token;
@@ -83,9 +84,9 @@ pub enum Expr {
     /// A unary expression, for example `!true`.
     Unary(UnaryOp, Box<Expr>),
     /// A variable expression, for example `name`.
-    Var(String),
+    Var(String, usize),
     /// An assignment expression, for example `a = 5`.
-    VarAssign(String, Box<Expr>),
+    VarAssign(String, Box<Expr>, usize),
     /// A function call, for example `f(1, 2)`.
     Call(Box<Expr>, Vec<Expr>),
     /// An anonymous function expression, for example `fun (a, b) { return a + b; }`.
@@ -100,8 +101,8 @@ impl fmt::Display for Expr {
             Expr::Grouping(ref expr) => write!(f, "(group {})", expr),
             Expr::Literal(ref value) => write!(f, "{}", value),
             Expr::Unary(op, ref expr) => write!(f, "({} {})", op, expr),
-            Expr::Var(ref name) => write!(f, "{}", name),
-            Expr::VarAssign(ref name, ref expr) => write!(f, "{} = {}", name, expr),
+            Expr::Var(ref name, _) => write!(f, "{}", name),
+            Expr::VarAssign(ref name, ref expr, _) => write!(f, "{} = {}", name, expr),
             Expr::Call(ref callee, ref arguments) => write!(f, "({} {:?})", callee, arguments),
             Expr::AnonymousFun(ref parameters, _) => write!(f, "(anonymous {:?})", parameters),
         }
@@ -501,8 +502,8 @@ impl Parser {
         if self.advance_if(vec![Token::Equal]) {
             let value = self.assignment()?;
 
-            if let Expr::Var(ref name) = expr {
-                return Ok(Expr::VarAssign(name.clone(), Box::new(value)));
+            if let Expr::Var(ref name, hops) = expr {
+                return Ok(Expr::VarAssign(name.clone(), Box::new(value), hops));
             }
 
             return Err(ParseError::InvalidAssignment(expr));
@@ -673,7 +674,7 @@ impl Parser {
             return Ok(Expr::Literal(Value::Str(s)));
         }
         if let Some(s) = self.advance_if_identifier() {
-            return Ok(Expr::Var(s));
+            return Ok(Expr::Var(s, usize::MAX));
         }
 
         if self.advance_if(vec![Token::LeftParen]) {

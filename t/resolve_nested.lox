@@ -1,0 +1,21 @@
+var global = 0;
+
+fun a(input) {
+  var one = 1;
+
+  fun b() {
+    var two = 2;
+    print input + one + two;
+
+    fun c() {
+      var three = 3;
+      print input + one + two + three + global;
+    }
+
+    c();
+  }
+
+  b();
+}
+
+a(-1);

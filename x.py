@@ -28,4 +28,3 @@ for path in glob.glob('t/*.lox'):
         exec(path)
     except FileNotFoundError:
         err(f"Skipping {path} because it doesn't have a .out file")
-        pass

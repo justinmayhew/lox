@@ -11,6 +11,7 @@ use rustyline::Editor;
 use lox::parser::*;
 use lox::scanner::*;
 use lox::interpreter::*;
+use lox::resolver::*;
 
 static HISTORY_FILE: &'static str = ".lox_history";
 
@@ -34,9 +35,15 @@ fn execute_file(filename: &str) {
 
     // Parse the list of statements.
     let mut parser = Parser::new(tokens);
-    let stmts = parser.parse().expect("error parsing file");
+    let mut stmts = parser.parse().expect("error parsing file");
 
     let mut interpreter = Interpreter::new();
+
+    let mut resolver = Resolver::new();
+    for stmt in &mut stmts {
+        resolver.resolve_stmt(stmt);
+    }
+
     interpreter
         .execute(&stmts)
         .expect("error executing program");

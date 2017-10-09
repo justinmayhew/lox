@@ -6,3 +6,4 @@ pub mod interpreter;
 pub mod parser;
 pub mod primitive;
 pub mod scanner;
+pub mod resolver;

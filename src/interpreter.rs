@@ -7,10 +7,10 @@ use std::rc::Rc;
 use environment::Environment;
 use parser::{BinOp, Expr, LogicOp, Stmt, UnaryOp};
 use primitive::{Error, Result, Value, ValueResult};
-use callable::Clock;
+use callable::{Clock, LoxFunction};
 
 pub struct Interpreter {
-    env: Environment,
+    pub env: Environment,
 }
 
 impl Interpreter {
@@ -29,7 +29,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn exec_stmt(&mut self, stmt: &Stmt) -> Result<()> {
+    pub fn exec_stmt(&mut self, stmt: &Stmt) -> Result<()> {
         match *stmt {
             Stmt::Expr(ref expr) => {
                 self.evaluate(expr)?;
@@ -46,6 +46,12 @@ impl Interpreter {
                 };
 
                 self.env.define(name.clone(), value);
+                Ok(())
+            }
+            Stmt::Fun(ref name, ref parameters, ref body) => {
+                let lox_function = LoxFunction::new(name.clone(), parameters.clone(), body.clone());
+                self.env
+                    .define(name.clone(), Value::Fun(Rc::new(lox_function)));
                 Ok(())
             }
             Stmt::Block(ref stmts) => {

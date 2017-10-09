@@ -3,6 +3,8 @@ use std::fmt;
 use primitive::Value;
 use scanner::Token;
 
+const PARAM_LIMIT: usize = 8;
+
 #[derive(Copy, Clone, Debug)]
 pub enum BinOp {
     Plus,
@@ -111,6 +113,8 @@ pub enum Stmt {
     Print(Expr),
     /// A variable declaration.
     VarDecl(String, Option<Expr>),
+    /// A function declaration.
+    Fun(String, Vec<String>, Vec<Stmt>),
     /// A block statement.
     Block(Vec<Stmt>),
     /// An if statement.
@@ -295,6 +299,8 @@ impl Parser {
     fn declaration(&mut self) -> ParseResult<Stmt> {
         let result = if self.advance_if(vec![Token::Var]) {
             self.var_declaration()
+        } else if self.advance_if(vec![Token::Fun]) {
+            self.fun_declaration()
         } else {
             self.statement()
         };
@@ -319,6 +325,36 @@ impl Parser {
         self.consume(Token::Semicolon, "Expect ';' after variable declaration.")?;
 
         Ok(Stmt::VarDecl(name, initializer))
+    }
+
+    fn fun_declaration(&mut self) -> ParseResult<Stmt> {
+        let name = self.consume_identifier()?;
+
+        self.consume(Token::LeftParen, "Expect '(' after fun name.")?;
+
+        let mut parameters = Vec::new();
+        if *self.peek() != Token::RightParen {
+            loop {
+                if parameters.len() >= PARAM_LIMIT {
+                    panic!(
+                        "Functions cannot have more than {} parameters.",
+                        PARAM_LIMIT
+                    );
+                }
+                parameters.push(self.consume_identifier()?);
+
+                if !self.advance_if(vec![Token::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(Token::RightParen, "Expect ')' after fun parameters.")?;
+        self.consume(Token::LeftBrace, "Expect '{' after fun parameter list.")?;
+
+        let body = self.block_statement()?;
+
+        Ok(Stmt::Fun(name, parameters, body))
     }
 
     fn statement(&mut self) -> ParseResult<Stmt> {
@@ -572,8 +608,8 @@ impl Parser {
         let mut arguments = Vec::new();
 
         if *self.peek() != Token::RightParen {
-            if arguments.len() >= 8 {
-                panic!("More than 8 arguments to function call.");
+            if arguments.len() >= PARAM_LIMIT {
+                panic!("More than {} arguments to function call.", PARAM_LIMIT);
             }
             loop {
                 arguments.push(self.expression()?);

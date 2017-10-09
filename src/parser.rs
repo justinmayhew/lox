@@ -1,5 +1,6 @@
 use std::fmt;
 
+use primitive::Value;
 use scanner::Token;
 
 #[derive(Copy, Clone, Debug)]
@@ -68,25 +69,6 @@ impl fmt::Display for LogicOp {
 }
 
 #[derive(Clone, Debug)]
-pub enum Value {
-    Str(String),
-    Int(i64),
-    Bool(bool),
-    Nil,
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Value::Str(ref s) => write!(f, "{}", s),
-            Value::Int(i) => write!(f, "{}", i),
-            Value::Bool(b) => write!(f, "{}", b),
-            Value::Nil => write!(f, "nil"),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
 pub enum Expr {
     /// A binary expression, for example `1 + 2`.
     Binary(Box<Expr>, BinOp, Box<Expr>),
@@ -102,6 +84,8 @@ pub enum Expr {
     Var(String),
     /// An assignment expression, for example `a = 5`.
     VarAssign(String, Box<Expr>),
+    /// A function call, for example `f(1, 2)`.
+    Call(Box<Expr>, Vec<Expr>),
 }
 
 impl fmt::Display for Expr {
@@ -114,6 +98,7 @@ impl fmt::Display for Expr {
             Expr::Unary(op, ref expr) => write!(f, "({} {})", op, expr),
             Expr::Var(ref name) => write!(f, "{}", name),
             Expr::VarAssign(ref name, ref expr) => write!(f, "{} = {}", name, expr),
+            Expr::Call(ref callee, ref arguments) => write!(f, "({} {:?})", callee, arguments),
         }
     }
 }
@@ -565,8 +550,42 @@ impl Parser {
             let right = self.unary()?;
             Ok(Expr::Unary(op, Box::new(right)))
         } else {
-            self.primary()
+            self.call()
         }
+    }
+
+    fn call(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.advance_if(vec![Token::LeftParen]) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> ParseResult<Expr> {
+        let mut arguments = Vec::new();
+
+        if *self.peek() != Token::RightParen {
+            if arguments.len() >= 8 {
+                panic!("More than 8 arguments to function call.");
+            }
+            loop {
+                arguments.push(self.expression()?);
+                if !self.advance_if(vec![Token::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(Token::RightParen, "Expect ')' after function arguments.")?;
+
+        Ok(Expr::Call(Box::new(callee), arguments))
     }
 
     fn primary(&mut self) -> ParseResult<Expr> {

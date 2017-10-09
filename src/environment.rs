@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use parser::Value;
+use primitive::Value;
 
 pub struct Environment {
     enclosing: Option<Box<Environment>>,

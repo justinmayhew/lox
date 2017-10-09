@@ -1,20 +1,13 @@
 use std::cmp::Ordering;
+use std::fmt;
 use std::mem;
 use std::ops;
-use std::result;
+use std::rc::Rc;
 
-use parser::{BinOp, Expr, LogicOp, Stmt, UnaryOp, Value};
 use environment::Environment;
-
-#[derive(Debug)]
-pub enum Error {
-    TypeError(String),
-    DivideByZero,
-    UndefinedVar(String),
-}
-
-type Result<T> = result::Result<T, Error>;
-type ValueResult = Result<Value>;
+use parser::{BinOp, Expr, LogicOp, Stmt, UnaryOp};
+use primitive::{Error, Result, Value, ValueResult};
+use callable::Clock;
 
 pub struct Interpreter {
     env: Environment,
@@ -22,9 +15,11 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self {
-            env: Environment::new(None),
-        }
+        let mut env = Environment::new(None);
+
+        env.define("clock".into(), Value::Fun(Rc::new(Clock)));
+
+        Self { env }
     }
 
     pub fn execute(&mut self, stmts: &[Stmt]) -> Result<()> {
@@ -161,6 +156,26 @@ impl Interpreter {
                     Err(Error::UndefinedVar(name.clone()))
                 }
             }
+            Expr::Call(ref callee, ref argument_exprs) => {
+                let callee = self.evaluate(&*callee)?;
+
+                let mut arguments = Vec::with_capacity(argument_exprs.len());
+                for expr in argument_exprs {
+                    arguments.push(self.evaluate(expr)?);
+                }
+
+                let f = callee.unwrap_callable();
+
+                if arguments.len() == f.arity() {
+                    f.call(self, arguments)
+                } else {
+                    Err(Error::ArityError(format!(
+                        "fun takes {} arguments but got {}",
+                        f.arity(),
+                        arguments.len(),
+                    )))
+                }
+            }
         }
     }
 }
@@ -171,6 +186,7 @@ fn is_truthy(value: &Value) -> bool {
         Value::Int(n) => n != 0,
         Value::Bool(b) => b,
         Value::Nil => false,
+        Value::Fun(..) => true,
     }
 }
 
@@ -241,5 +257,23 @@ fn cmp(left: Value, right: Value) -> Result<Ordering> {
         (left, right) => Err(Error::TypeError(
             format!("Cannot compare {:?} to {:?}", left, right),
         )),
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Value::Str(ref s) => write!(f, "{}", s),
+            Value::Int(i) => write!(f, "{}", i),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Nil => write!(f, "nil"),
+            Value::Fun(ref func) => write!(f, "<fn {}>", func.name()),
+        }
+    }
+}
+
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }

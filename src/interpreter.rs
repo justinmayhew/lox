@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::fmt;
 use std::mem;
@@ -10,16 +11,18 @@ use primitive::{Error, Result, Value, ValueResult};
 use callable::{Clock, LoxFunction};
 
 pub struct Interpreter {
-    pub env: Environment,
+    pub env: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
-        let mut env = Environment::new(None);
+        let mut env = Environment::new();
 
         env.define("clock".into(), Value::Fun(Rc::new(Clock)));
 
-        Self { env }
+        Self {
+            env: Rc::new(RefCell::new(env)),
+        }
     }
 
     pub fn execute(&mut self, stmts: &[Stmt]) -> Result<()> {
@@ -45,12 +48,18 @@ impl Interpreter {
                     None => Value::Nil,
                 };
 
-                self.env.define(name.clone(), value);
+                self.env.borrow_mut().define(name.clone(), value);
                 Ok(())
             }
             Stmt::Fun(ref name, ref parameters, ref body) => {
-                let lox_function = LoxFunction::new(name.clone(), parameters.clone(), body.clone());
+                let lox_function = LoxFunction::new(
+                    name.clone(),
+                    parameters.clone(),
+                    body.clone(),
+                    Rc::clone(&self.env),
+                );
                 self.env
+                    .borrow_mut()
                     .define(name.clone(), Value::Fun(Rc::new(lox_function)));
                 Ok(())
             }
@@ -65,8 +74,9 @@ impl Interpreter {
             }
             Stmt::Block(ref stmts) => {
                 // Set up new environment for this block.
-                let previous = mem::replace(&mut self.env, Environment::new(None));
-                self.env.set_enclosing(previous);
+                let previous =
+                    mem::replace(&mut self.env, Rc::new(RefCell::new(Environment::new())));
+                self.env.borrow_mut().set_enclosing(previous);
 
                 let mut result = Ok(());
 
@@ -78,8 +88,8 @@ impl Interpreter {
                 }
 
                 // Restore previous environment.
-                let mut env = mem::replace(&mut self.env, Environment::new(None));
-                let previous = env.pop_enclosing();
+                let env = mem::replace(&mut self.env, Rc::new(RefCell::new(Environment::new())));
+                let previous = env.borrow_mut().pop_enclosing();
                 self.env = previous;
 
                 result
@@ -158,14 +168,14 @@ impl Interpreter {
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
                 }
             }
-            Expr::Var(ref name) => match self.env.get(name) {
-                Some(value) => Ok(value.clone()),
+            Expr::Var(ref name) => match self.env.borrow().get(name) {
+                Some(value) => Ok(value),
                 None => Err(Error::UndefinedVar(name.clone())),
             },
             Expr::VarAssign(ref name, ref expr) => {
                 let value = self.evaluate(&*expr)?;
 
-                if self.env.assign(name, value.clone()) {
+                if self.env.borrow_mut().assign(name, value.clone()) {
                     Ok(value)
                 } else {
                     Err(Error::UndefinedVar(name.clone()))

@@ -1,10 +1,13 @@
+use std::cell::RefCell;
+use std::mem;
+use std::rc::Rc;
+
 use time;
 
 use environment::Environment;
 use interpreter::Interpreter;
 use parser::Stmt;
 use primitive::{Error, Value, ValueResult};
-use std::mem;
 
 pub trait LoxCallable {
     fn call(&self, &mut Interpreter, Vec<Value>) -> ValueResult;
@@ -32,14 +35,21 @@ pub struct LoxFunction {
     name: String,
     parameters: Vec<String>,
     body: Vec<Stmt>,
+    closure: Rc<RefCell<Environment>>,
 }
 
 impl LoxFunction {
-    pub fn new(name: String, parameters: Vec<String>, body: Vec<Stmt>) -> Self {
+    pub fn new(
+        name: String,
+        parameters: Vec<String>,
+        body: Vec<Stmt>,
+        closure: Rc<RefCell<Environment>>,
+    ) -> Self {
         Self {
             name,
             parameters,
             body,
+            closure,
         }
     }
 }
@@ -47,12 +57,21 @@ impl LoxFunction {
 impl LoxCallable for LoxFunction {
     fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Value>) -> ValueResult {
         // Set up new environment for this block.
-        let previous = mem::replace(&mut interpreter.env, Environment::new(None));
-        interpreter.env.set_enclosing(previous);
+        let previous = mem::replace(
+            &mut interpreter.env,
+            Rc::new(RefCell::new(Environment::new())),
+        );
+        interpreter
+            .env
+            .borrow_mut()
+            .set_enclosing(Rc::clone(&self.closure));
 
         // Bind the parameters to the arguments the function was called with.
         for (key, value) in self.parameters.iter().zip(arguments.iter()) {
-            interpreter.env.define(key.clone(), value.clone());
+            interpreter
+                .env
+                .borrow_mut()
+                .define(key.clone(), value.clone());
         }
 
         let mut result = Ok(());
@@ -65,8 +84,6 @@ impl LoxCallable for LoxFunction {
         }
 
         // Restore previous environment.
-        let mut env = mem::replace(&mut interpreter.env, Environment::new(None));
-        let previous = env.pop_enclosing();
         interpreter.env = previous;
 
         match result {

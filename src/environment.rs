@@ -1,16 +1,18 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use primitive::Value;
 
 pub struct Environment {
-    enclosing: Option<Box<Environment>>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
     values: HashMap<String, Value>,
 }
 
 impl Environment {
-    pub fn new(enclosing: Option<Box<Environment>>) -> Self {
+    pub fn new() -> Self {
         Environment {
-            enclosing,
+            enclosing: None,
             values: HashMap::new(),
         }
     }
@@ -26,25 +28,28 @@ impl Environment {
             true
         } else {
             match self.enclosing {
-                Some(ref mut env) => env.assign(key, value),
+                Some(ref mut env) => env.borrow_mut().assign(key, value),
                 None => false,
             }
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<&Value> {
-        self.values.get(key).or_else(|| match self.enclosing {
-            Some(ref env) => env.get(key),
-            None => None,
-        })
+    pub fn get(&self, key: &str) -> Option<Value> {
+        self.values
+            .get(key)
+            .cloned()
+            .or_else(|| match self.enclosing {
+                Some(ref env) => env.borrow().get(key),
+                None => None,
+            })
     }
 
-    pub fn set_enclosing(&mut self, enclosing: Environment) {
-        self.enclosing = Some(Box::new(enclosing));
+    pub fn set_enclosing(&mut self, enclosing: Rc<RefCell<Environment>>) {
+        self.enclosing = Some(enclosing);
     }
 
-    pub fn pop_enclosing(&mut self) -> Self {
-        *self.enclosing
+    pub fn pop_enclosing(&mut self) -> Rc<RefCell<Environment>> {
+        self.enclosing
             .take()
             .expect("pop_enclosing with no enclosing environmnet")
     }

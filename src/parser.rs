@@ -88,6 +88,8 @@ pub enum Expr {
     VarAssign(String, Box<Expr>),
     /// A function call, for example `f(1, 2)`.
     Call(Box<Expr>, Vec<Expr>),
+    /// An anonymous function expression, for example `fun (a, b) { return a + b; }`.
+    AnonymousFun(Vec<String>, Vec<Stmt>),
 }
 
 impl fmt::Display for Expr {
@@ -101,6 +103,7 @@ impl fmt::Display for Expr {
             Expr::Var(ref name) => write!(f, "{}", name),
             Expr::VarAssign(ref name, ref expr) => write!(f, "{} = {}", name, expr),
             Expr::Call(ref callee, ref arguments) => write!(f, "({} {:?})", callee, arguments),
+            Expr::AnonymousFun(ref parameters, _) => write!(f, "(anonymous {:?})", parameters),
         }
     }
 }
@@ -331,9 +334,18 @@ impl Parser {
 
     fn fun_declaration(&mut self) -> ParseResult<Stmt> {
         let name = self.consume_identifier()?;
-
         self.consume(Token::LeftParen, "Expect '(' after fun name.")?;
+        let (parameters, body) = self.fun_parameters_and_body()?;
+        Ok(Stmt::Fun(name, parameters, body))
+    }
 
+    fn fun_expression(&mut self) -> ParseResult<Expr> {
+        self.consume(Token::LeftParen, "Expect '(' after fun keyword.")?;
+        let (parameters, body) = self.fun_parameters_and_body()?;
+        Ok(Expr::AnonymousFun(parameters, body))
+    }
+
+    fn fun_parameters_and_body(&mut self) -> ParseResult<(Vec<String>, Vec<Stmt>)> {
         let mut parameters = Vec::new();
         if *self.peek() != Token::RightParen {
             loop {
@@ -356,7 +368,7 @@ impl Parser {
 
         let body = self.block_statement()?;
 
-        Ok(Stmt::Fun(name, parameters, body))
+        Ok((parameters, body))
     }
 
     fn statement(&mut self) -> ParseResult<Stmt> {
@@ -649,6 +661,9 @@ impl Parser {
         }
         if self.advance_if(vec![Token::Nil]) {
             return Ok(Expr::Literal(Value::Nil));
+        }
+        if self.advance_if(vec![Token::Fun]) {
+            return self.fun_expression();
         }
 
         if let Some(i) = self.advance_if_int() {

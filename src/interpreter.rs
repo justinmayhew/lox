@@ -201,6 +201,15 @@ impl Interpreter {
                     )))
                 }
             }
+            Expr::AnonymousFun(ref parameters, ref body) => {
+                let callable = LoxFunction::new(
+                    "anonymous".into(),
+                    parameters.clone(),
+                    body.clone(),
+                    Rc::clone(&self.env),
+                );
+                Ok(Value::Fun(Rc::new(callable)))
+            }
         }
     }
 }

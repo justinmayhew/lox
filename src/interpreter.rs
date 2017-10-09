@@ -96,9 +96,9 @@ impl Interpreter {
             }
             Stmt::If(ref condition, ref then_branch, ref else_branch) => {
                 if is_truthy(&self.evaluate(condition)?) {
-                    self.exec_stmt(&*then_branch)?;
+                    self.exec_stmt(then_branch)?;
                 } else if let Some(ref branch) = *else_branch {
-                    self.exec_stmt(&*branch)?;
+                    self.exec_stmt(branch)?;
                 }
                 Ok(())
             }
@@ -114,8 +114,8 @@ impl Interpreter {
     pub fn evaluate(&mut self, expr: &Expr) -> ValueResult {
         match *expr {
             Expr::Binary(ref left_expr, op, ref right_expr) => {
-                let left = self.evaluate(&*left_expr)?;
-                let right = self.evaluate(&*right_expr)?;
+                let left = self.evaluate(left_expr)?;
+                let right = self.evaluate(right_expr)?;
 
                 match op {
                     BinOp::Plus => left + right,
@@ -140,25 +140,25 @@ impl Interpreter {
                 }
             }
             Expr::Logical(ref left_expr, op, ref right_expr) => {
-                let left = self.evaluate(&*left_expr)?;
+                let left = self.evaluate(left_expr)?;
 
                 match op {
                     LogicOp::And => if is_truthy(&left) {
-                        self.evaluate(&*right_expr)
+                        self.evaluate(right_expr)
                     } else {
                         Ok(left)
                     },
                     LogicOp::Or => if is_truthy(&left) {
                         Ok(left)
                     } else {
-                        self.evaluate(&*right_expr)
+                        self.evaluate(right_expr)
                     },
                 }
             }
-            Expr::Grouping(ref expr) => self.evaluate(&*expr),
+            Expr::Grouping(ref expr) => self.evaluate(expr),
             Expr::Literal(ref value) => Ok(value.clone()),
             Expr::Unary(op, ref expr) => {
-                let value = self.evaluate(&*expr)?;
+                let value = self.evaluate(expr)?;
 
                 match op {
                     UnaryOp::Minus => match value {
@@ -173,7 +173,7 @@ impl Interpreter {
                 None => Err(Error::UndefinedVar(name.clone())),
             },
             Expr::VarAssign(ref name, ref expr) => {
-                let value = self.evaluate(&*expr)?;
+                let value = self.evaluate(expr)?;
 
                 if self.env.borrow_mut().assign(name, value.clone()) {
                     Ok(value)
@@ -182,7 +182,7 @@ impl Interpreter {
                 }
             }
             Expr::Call(ref callee, ref argument_exprs) => {
-                let callee = self.evaluate(&*callee)?;
+                let callee = self.evaluate(callee)?;
 
                 let mut arguments = Vec::with_capacity(argument_exprs.len());
                 for expr in argument_exprs {

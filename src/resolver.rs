@@ -2,13 +2,24 @@ use std::collections::HashMap;
 
 use parser::{Expr, Stmt};
 
+#[derive(Copy, Clone)]
+enum FnKind {
+    None,
+    Function,
+    Anonymous,
+}
+
 pub struct Resolver {
-    scopes: Vec<HashMap<String, bool>>,
+    scopes: Vec<HashMap<String, (bool, usize)>>,
+    current_fn: FnKind,
 }
 
 impl Resolver {
     pub fn new() -> Self {
-        Self { scopes: Vec::new() }
+        Self {
+            scopes: Vec::new(),
+            current_fn: FnKind::None,
+        }
     }
 
     pub fn resolve_stmt(&mut self, stmt: &mut Stmt) {
@@ -24,11 +35,17 @@ impl Resolver {
             Stmt::Fun(ref name, ref mut params, ref mut body) => {
                 self.declare(name.clone());
                 self.define(name.clone());
-                self.resolve_function(params, body);
+                self.resolve_function(params, body, FnKind::Function);
             }
-            Stmt::Return(ref mut expr) => if let Some(ref mut expr) = *expr {
-                self.resolve_expr(expr);
-            },
+            Stmt::Return(ref mut expr) => {
+                if let FnKind::None = self.current_fn {
+                    panic!("Cannot return from top-level code.");
+                }
+
+                if let Some(ref mut expr) = *expr {
+                    self.resolve_expr(expr);
+                }
+            }
             Stmt::Block(ref mut body) => {
                 self.begin_scope();
                 for stmt in body {
@@ -65,7 +82,7 @@ impl Resolver {
             Expr::Unary(_op, ref mut expr) => self.resolve_expr(expr),
             Expr::Var(ref name, ref mut hops) => {
                 if let Some(map) = self.scopes.last() {
-                    if map.get(name) == Some(&false) {
+                    if map.get(name) == Some(&(false, 0)) {
                         panic!("Cannot read local variable in its own initializer.");
                     }
                 }
@@ -82,12 +99,15 @@ impl Resolver {
                 }
             }
             Expr::AnonymousFun(ref mut params, ref mut body) => {
-                self.resolve_function(params, body);
+                self.resolve_function(params, body, FnKind::Anonymous);
             }
         }
     }
 
-    fn resolve_function(&mut self, params: &mut [String], body: &mut [Stmt]) {
+    fn resolve_function(&mut self, params: &mut [String], body: &mut [Stmt], kind: FnKind) {
+        let enclosing_fn = self.current_fn;
+        self.current_fn = kind;
+
         self.begin_scope();
         for param in params {
             self.declare(param.clone());
@@ -97,6 +117,8 @@ impl Resolver {
             self.resolve_stmt(stmt);
         }
         self.end_scope();
+
+        self.current_fn = enclosing_fn;
     }
 
     fn begin_scope(&mut self) {
@@ -104,6 +126,15 @@ impl Resolver {
     }
 
     fn end_scope(&mut self) {
+        {
+            let scope = self.scopes.last_mut().unwrap();
+            for (key, &(_, usages)) in scope.iter() {
+                if usages == 0 {
+                    eprintln!("Unused variable: {}", key);
+                }
+            }
+        }
+
         self.scopes.pop();
     }
 
@@ -113,7 +144,10 @@ impl Resolver {
         }
 
         let scope = self.scopes.last_mut().unwrap();
-        scope.insert(name, false);
+        if scope.contains_key(&name) {
+            panic!("Variable with this name is already declared in this scope.");
+        }
+        scope.insert(name, (false, 0));
     }
 
     fn define(&mut self, name: String) {
@@ -122,17 +156,16 @@ impl Resolver {
         }
 
         let scope = self.scopes.last_mut().unwrap();
-        scope.insert(name, true);
+        scope.insert(name, (true, 0));
     }
 
     fn resolve_local(&mut self, name: &str, hops: &mut usize) {
-        if self.scopes.is_empty() {
-            return;
-        }
+        let len = self.scopes.len();
 
-        for i in (0..self.scopes.len()).rev() {
-            if self.scopes[i].contains_key(name) {
-                *hops = self.scopes.len() - 1 - i;
+        for i in (0..len).rev() {
+            if let Some(ref mut init_and_usage) = self.scopes[i].get_mut(name) {
+                init_and_usage.1 += 1;
+                *hops = len - 1 - i;
                 return;
             }
         }

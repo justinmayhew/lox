@@ -178,15 +178,23 @@ impl Parser {
         Ok(stmts)
     }
 
-    fn advance_if(&mut self, tokens: Vec<Token>) -> bool {
+    fn advance_if(&mut self, token: &Token) -> bool {
+        if self.check(token) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn advance_if_any(&mut self, tokens: Vec<Token>) -> Option<Token> {
         for token in tokens {
-            if self.check(&token) {
-                self.advance();
-                return true;
+            if self.advance_if(&token) {
+                return Some(token);
             }
         }
 
-        false
+        None
     }
 
     fn advance_if_str(&mut self) -> Option<String> {
@@ -253,8 +261,8 @@ impl Parser {
         &self.tokens[self.pos - 1]
     }
 
-    fn consume(&mut self, token: Token, message: &str) -> ParseResult<()> {
-        if self.advance_if(vec![token]) {
+    fn consume(&mut self, token: &Token, message: &str) -> ParseResult<()> {
+        if self.advance_if(token) {
             return Ok(());
         }
 
@@ -303,9 +311,9 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> ParseResult<Stmt> {
-        let result = if self.advance_if(vec![Token::Var]) {
+        let result = if self.advance_if(&Token::Var) {
             self.var_declaration()
-        } else if self.advance_if(vec![Token::Fun]) {
+        } else if self.advance_if(&Token::Fun) {
             self.fun_declaration()
         } else {
             self.statement()
@@ -322,26 +330,26 @@ impl Parser {
     fn var_declaration(&mut self) -> ParseResult<Stmt> {
         let name = self.consume_identifier()?;
 
-        let initializer = if self.advance_if(vec![Token::Equal]) {
+        let initializer = if self.advance_if(&Token::Equal) {
             Some(self.expression()?)
         } else {
             None
         };
 
-        self.consume(Token::Semicolon, "Expect ';' after variable declaration.")?;
+        self.consume(&Token::Semicolon, "Expect ';' after variable declaration.")?;
 
         Ok(Stmt::VarDecl(name, initializer))
     }
 
     fn fun_declaration(&mut self) -> ParseResult<Stmt> {
         let name = self.consume_identifier()?;
-        self.consume(Token::LeftParen, "Expect '(' after fun name.")?;
+        self.consume(&Token::LeftParen, "Expect '(' after fun name.")?;
         let (parameters, body) = self.fun_parameters_and_body()?;
         Ok(Stmt::Fun(name, parameters, body))
     }
 
     fn fun_expression(&mut self) -> ParseResult<Expr> {
-        self.consume(Token::LeftParen, "Expect '(' after fun keyword.")?;
+        self.consume(&Token::LeftParen, "Expect '(' after fun keyword.")?;
         let (parameters, body) = self.fun_parameters_and_body()?;
         Ok(Expr::AnonymousFun(parameters, body))
     }
@@ -358,14 +366,14 @@ impl Parser {
                 }
                 parameters.push(self.consume_identifier()?);
 
-                if !self.advance_if(vec![Token::Comma]) {
+                if !self.advance_if(&Token::Comma) {
                     break;
                 }
             }
         }
 
-        self.consume(Token::RightParen, "Expect ')' after fun parameters.")?;
-        self.consume(Token::LeftBrace, "Expect '{' after fun parameter list.")?;
+        self.consume(&Token::RightParen, "Expect ')' after fun parameters.")?;
+        self.consume(&Token::LeftBrace, "Expect '{' after fun parameter list.")?;
 
         let body = self.block_statement()?;
 
@@ -373,17 +381,17 @@ impl Parser {
     }
 
     fn statement(&mut self) -> ParseResult<Stmt> {
-        if self.advance_if(vec![Token::Print]) {
+        if self.advance_if(&Token::Print) {
             self.print_statement()
-        } else if self.advance_if(vec![Token::LeftBrace]) {
+        } else if self.advance_if(&Token::LeftBrace) {
             Ok(Stmt::Block(self.block_statement()?))
-        } else if self.advance_if(vec![Token::If]) {
+        } else if self.advance_if(&Token::If) {
             self.if_statement()
-        } else if self.advance_if(vec![Token::While]) {
+        } else if self.advance_if(&Token::While) {
             self.while_statement()
-        } else if self.advance_if(vec![Token::For]) {
+        } else if self.advance_if(&Token::For) {
             self.for_statement()
-        } else if self.advance_if(vec![Token::Return]) {
+        } else if self.advance_if(&Token::Return) {
             self.return_statement()
         } else {
             self.expression_statement()
@@ -392,7 +400,7 @@ impl Parser {
 
     fn print_statement(&mut self) -> ParseResult<Stmt> {
         let expr = self.expression()?;
-        self.consume(Token::Semicolon, "Expect ';' after print statement.")?;
+        self.consume(&Token::Semicolon, "Expect ';' after print statement.")?;
         Ok(Stmt::Print(expr))
     }
 
@@ -403,18 +411,18 @@ impl Parser {
             stmts.push(self.declaration()?);
         }
 
-        self.consume(Token::RightBrace, "Expect '}' after block.")?;
+        self.consume(&Token::RightBrace, "Expect '}' after block.")?;
         Ok(stmts)
     }
 
     fn if_statement(&mut self) -> ParseResult<Stmt> {
-        self.consume(Token::LeftParen, "Expect '(' after if.")?;
+        self.consume(&Token::LeftParen, "Expect '(' after if.")?;
         let condition = self.expression()?;
-        self.consume(Token::RightParen, "Expect ')' after if condition.")?;
+        self.consume(&Token::RightParen, "Expect ')' after if condition.")?;
         let then_branch = Box::new(self.statement()?);
 
         // Check for the optional else.
-        let else_branch = if self.advance_if(vec![Token::Else]) {
+        let else_branch = if self.advance_if(&Token::Else) {
             Some(Box::new(self.statement()?))
         } else {
             None
@@ -424,30 +432,30 @@ impl Parser {
     }
 
     fn while_statement(&mut self) -> ParseResult<Stmt> {
-        self.consume(Token::LeftParen, "Expect '(' after while.")?;
+        self.consume(&Token::LeftParen, "Expect '(' after while.")?;
         let condition = self.expression()?;
-        self.consume(Token::RightParen, "Expect ')' after while condition.")?;
+        self.consume(&Token::RightParen, "Expect ')' after while condition.")?;
         let body = self.statement()?;
         Ok(Stmt::While(condition, Box::new(body)))
     }
 
     fn for_statement(&mut self) -> ParseResult<Stmt> {
-        self.consume(Token::LeftParen, "Expect '(' after for.")?;
+        self.consume(&Token::LeftParen, "Expect '(' after for.")?;
 
-        let initializer = if self.advance_if(vec![Token::Var]) {
+        let initializer = if self.advance_if(&Token::Var) {
             Some(self.var_declaration()?)
-        } else if self.advance_if(vec![Token::Semicolon]) {
+        } else if self.advance_if(&Token::Semicolon) {
             None
         } else {
             // It has to be an expression statement.
             Some(self.expression_statement()?)
         };
 
-        let condition = if self.advance_if(vec![Token::Semicolon]) {
+        let condition = if self.advance_if(&Token::Semicolon) {
             Expr::Literal(Value::Bool(true))
         } else {
             let condition = self.expression()?;
-            self.consume(Token::Semicolon, "Expect ';' after for condition.")?;
+            self.consume(&Token::Semicolon, "Expect ';' after for condition.")?;
             condition
         };
 
@@ -457,7 +465,7 @@ impl Parser {
             Some(self.expression()?)
         };
 
-        self.consume(Token::RightParen, "Expect ')' after for.")?;
+        self.consume(&Token::RightParen, "Expect ')' after for.")?;
 
         let mut body = self.statement()?;
 
@@ -481,14 +489,14 @@ impl Parser {
             None
         };
 
-        self.consume(Token::Semicolon, "Expect ';' after return statement.")?;
+        self.consume(&Token::Semicolon, "Expect ';' after return statement.")?;
 
         Ok(Stmt::Return(expr))
     }
 
     fn expression_statement(&mut self) -> ParseResult<Stmt> {
         let expr = self.expression()?;
-        self.consume(Token::Semicolon, "Expect ';' after expression statement.")?;
+        self.consume(&Token::Semicolon, "Expect ';' after expression statement.")?;
         Ok(Stmt::Expr(expr))
     }
 
@@ -499,7 +507,7 @@ impl Parser {
     fn assignment(&mut self) -> ParseResult<Expr> {
         let expr = self.or()?;
 
-        if self.advance_if(vec![Token::Equal]) {
+        if self.advance_if(&Token::Equal) {
             let value = self.assignment()?;
 
             if let Expr::Var(ref name, hops) = expr {
@@ -515,7 +523,7 @@ impl Parser {
     fn or(&mut self) -> ParseResult<Expr> {
         let mut expr = self.and()?;
 
-        while self.advance_if(vec![Token::Or]) {
+        while self.advance_if(&Token::Or) {
             let right = self.and()?;
             expr = Expr::Logical(Box::new(expr), LogicOp::Or, Box::new(right));
         }
@@ -526,7 +534,7 @@ impl Parser {
     fn and(&mut self) -> ParseResult<Expr> {
         let mut expr = self.equality()?;
 
-        while self.advance_if(vec![Token::And]) {
+        while self.advance_if(&Token::And) {
             let right = self.equality()?;
             expr = Expr::Logical(Box::new(expr), LogicOp::And, Box::new(right));
         }
@@ -537,8 +545,8 @@ impl Parser {
     fn equality(&mut self) -> ParseResult<Expr> {
         let mut expr = self.comparison()?;
 
-        while self.advance_if(vec![Token::BangEqual, Token::EqualEqual]) {
-            let op = match *self.previous() {
+        while let Some(token) = self.advance_if_any(vec![Token::BangEqual, Token::EqualEqual]) {
+            let op = match token {
                 Token::BangEqual => BinOp::BangEqual,
                 Token::EqualEqual => BinOp::EqualEqual,
                 ref token => panic!("unexpected token: {:?}", token),
@@ -553,13 +561,13 @@ impl Parser {
     fn comparison(&mut self) -> ParseResult<Expr> {
         let mut expr = self.addition()?;
 
-        while self.advance_if(vec![
+        while let Some(token) = self.advance_if_any(vec![
             Token::Greater,
             Token::GreaterEqual,
             Token::Less,
             Token::LessEqual,
         ]) {
-            let op = match *self.previous() {
+            let op = match token {
                 Token::Greater => BinOp::Greater,
                 Token::GreaterEqual => BinOp::GreaterEqual,
                 Token::Less => BinOp::Less,
@@ -576,8 +584,8 @@ impl Parser {
     fn addition(&mut self) -> ParseResult<Expr> {
         let mut expr = self.multiplication()?;
 
-        while self.advance_if(vec![Token::Minus, Token::Plus]) {
-            let op = match *self.previous() {
+        while let Some(token) = self.advance_if_any(vec![Token::Minus, Token::Plus]) {
+            let op = match token {
                 Token::Minus => BinOp::Minus,
                 Token::Plus => BinOp::Plus,
                 ref token => panic!("unexpected token: {:?}", token),
@@ -592,8 +600,8 @@ impl Parser {
     fn multiplication(&mut self) -> ParseResult<Expr> {
         let mut expr = self.unary()?;
 
-        while self.advance_if(vec![Token::Slash, Token::Star]) {
-            let op = match *self.previous() {
+        while let Some(token) = self.advance_if_any(vec![Token::Slash, Token::Star]) {
+            let op = match token {
                 Token::Slash => BinOp::Slash,
                 Token::Star => BinOp::Star,
                 ref token => panic!("unexpected token: {:?}", token),
@@ -606,8 +614,8 @@ impl Parser {
     }
 
     fn unary(&mut self) -> ParseResult<Expr> {
-        if self.advance_if(vec![Token::Minus, Token::Bang]) {
-            let op = match *self.previous() {
+        if let Some(token) = self.advance_if_any(vec![Token::Minus, Token::Bang]) {
+            let op = match token {
                 Token::Minus => UnaryOp::Minus,
                 Token::Bang => UnaryOp::Bang,
                 ref token => panic!("unexpected token: {:?}", token),
@@ -623,7 +631,7 @@ impl Parser {
         let mut expr = self.primary()?;
 
         loop {
-            if self.advance_if(vec![Token::LeftParen]) {
+            if self.advance_if(&Token::LeftParen) {
                 expr = self.finish_call(expr)?;
             } else {
                 break;
@@ -642,28 +650,28 @@ impl Parser {
             }
             loop {
                 arguments.push(self.expression()?);
-                if !self.advance_if(vec![Token::Comma]) {
+                if !self.advance_if(&Token::Comma) {
                     break;
                 }
             }
         }
 
-        self.consume(Token::RightParen, "Expect ')' after function arguments.")?;
+        self.consume(&Token::RightParen, "Expect ')' after function arguments.")?;
 
         Ok(Expr::Call(Box::new(callee), arguments))
     }
 
     fn primary(&mut self) -> ParseResult<Expr> {
-        if self.advance_if(vec![Token::False]) {
+        if self.advance_if(&Token::False) {
             return Ok(Expr::Literal(Value::Bool(false)));
         }
-        if self.advance_if(vec![Token::True]) {
+        if self.advance_if(&Token::True) {
             return Ok(Expr::Literal(Value::Bool(true)));
         }
-        if self.advance_if(vec![Token::Nil]) {
+        if self.advance_if(&Token::Nil) {
             return Ok(Expr::Literal(Value::Nil));
         }
-        if self.advance_if(vec![Token::Fun]) {
+        if self.advance_if(&Token::Fun) {
             return self.fun_expression();
         }
 
@@ -677,9 +685,9 @@ impl Parser {
             return Ok(Expr::Var(s, usize::MAX));
         }
 
-        if self.advance_if(vec![Token::LeftParen]) {
+        if self.advance_if(&Token::LeftParen) {
             let expr = self.expression()?;
-            self.consume(Token::RightParen, "Expect ')' after expression.")?;
+            self.consume(&Token::RightParen, "Expect ')' after expression.")?;
             return Ok(Expr::Grouping(Box::new(expr)));
         }
 

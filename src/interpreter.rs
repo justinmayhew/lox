@@ -1,15 +1,17 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt;
 use std::mem;
 use std::ops;
 use std::rc::Rc;
 use std::usize;
 
+use callable::{Clock, LoxFunction};
+use class::LoxClass;
 use environment::Environment;
 use parser::{BinOp, Expr, LogicOp, Stmt, UnaryOp};
 use primitive::{Error, Result, Value, ValueResult};
-use callable::{Clock, LoxFunction};
 
 pub struct Interpreter {
     globals: Rc<RefCell<Environment>>,
@@ -54,16 +56,26 @@ impl Interpreter {
                 self.env.borrow_mut().define(name.clone(), value);
                 Ok(())
             }
-            Stmt::Fun(ref name, ref parameters, ref body) => {
-                let lox_function = LoxFunction::new(
-                    name.clone(),
-                    parameters.clone(),
-                    body.clone(),
-                    Rc::clone(&self.env),
-                );
+            Stmt::Fun(ref fun) => {
+                let lox_function = LoxFunction::new(fun.clone(), Rc::clone(&self.env));
                 self.env
                     .borrow_mut()
-                    .define(name.clone(), Value::Fun(Rc::new(lox_function)));
+                    .define(fun.name.clone(), Value::Fun(Rc::new(lox_function)));
+                Ok(())
+            }
+            Stmt::Class(ref class) => {
+                self.env.borrow_mut().define(class.name.clone(), Value::Nil);
+
+                let mut methods = HashMap::new();
+                for method in &class.methods {
+                    let func = LoxFunction::new(method.clone(), Rc::clone(&self.env));
+                    methods.insert(method.name.clone(), Rc::new(func));
+                }
+                let lox_class = LoxClass::new(class.name.clone(), methods);
+
+                self.env
+                    .borrow_mut()
+                    .assign(&class.name, Value::Class(lox_class));
                 Ok(())
             }
             Stmt::Return(ref expr) => {
@@ -171,19 +183,7 @@ impl Interpreter {
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
                 }
             }
-            Expr::Var(ref name, hops) => {
-                if hops == usize::MAX {
-                    // Global
-                    match self.globals.borrow().get(name) {
-                        Some(value) => Ok(value),
-                        None => Err(Error::UndefinedVar(name.clone())),
-                    }
-                } else {
-                    // Non-global
-                    let value = self.env.borrow().get_at(name, hops);
-                    Ok(value)
-                }
-            }
+            Expr::Var(ref name, hops) => self.look_up_variable(name, hops),
             Expr::VarAssign(ref name, ref expr, hops) => {
                 let value = self.evaluate(expr)?;
 
@@ -218,15 +218,47 @@ impl Interpreter {
                     )))
                 }
             }
-            Expr::AnonymousFun(ref parameters, ref body) => {
-                let callable = LoxFunction::new(
-                    "anonymous".into(),
-                    parameters.clone(),
-                    body.clone(),
-                    Rc::clone(&self.env),
-                );
+            Expr::AnonymousFun(ref fun) => {
+                let callable = LoxFunction::new(fun.clone(), Rc::clone(&self.env));
                 Ok(Value::Fun(Rc::new(callable)))
             }
+            Expr::Get(ref expr, ref name) => {
+                let object = self.evaluate(expr)?;
+                if let Value::Instance(instance) = object {
+                    instance.get(name)
+                } else {
+                    Err(Error::TypeError(
+                        format!("Unable to get {} property on {}", name, object),
+                    ))
+                }
+            }
+            Expr::Set(ref left, ref name, ref right) => {
+                let object = self.evaluate(left)?;
+                if let Value::Instance(mut instance) = object {
+                    let value = self.evaluate(right)?;
+                    instance.set(name.clone(), value.clone());
+                    Ok(value)
+                } else {
+                    Err(Error::TypeError(
+                        format!("Unable to set {} property on {}", name, object),
+                    ))
+                }
+            }
+            Expr::This(hops) => self.look_up_variable("this", hops),
+        }
+    }
+
+    fn look_up_variable(&self, name: &str, hops: usize) -> ValueResult {
+        if hops == usize::MAX {
+            // Global
+            match self.globals.borrow().get(name) {
+                Some(value) => Ok(value),
+                None => Err(Error::UndefinedVar(name.into())),
+            }
+        } else {
+            // Non-global
+            let value = self.env.borrow().get_at(name, hops);
+            Ok(value)
         }
     }
 }
@@ -237,7 +269,7 @@ fn is_truthy(value: &Value) -> bool {
         Value::Int(n) => n != 0,
         Value::Bool(b) => b,
         Value::Nil => false,
-        Value::Fun(..) => true,
+        Value::Fun(..) | Value::Class(..) | Value::Instance(..) => true,
     }
 }
 
@@ -318,7 +350,9 @@ impl fmt::Display for Value {
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
-            Value::Fun(ref func) => write!(f, "<fn {}>", func.name()),
+            Value::Fun(ref func) => write!(f, "<fun {}>", func.name()),
+            Value::Class(ref class) => write!(f, "<class {}>", class.name()),
+            Value::Instance(ref instance) => write!(f, "<{} instance>", instance.class_name()),
         }
     }
 }

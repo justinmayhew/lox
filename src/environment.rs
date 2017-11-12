@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use primitive::Value;
 
+#[derive(Clone, Debug)]
 pub struct Environment {
     enclosing: Option<Rc<RefCell<Environment>>>,
     values: HashMap<String, Value>,
@@ -72,6 +73,6 @@ impl Environment {
     pub fn pop_enclosing(&mut self) -> Rc<RefCell<Environment>> {
         self.enclosing
             .take()
-            .expect("pop_enclosing with no enclosing environmnet")
+            .expect("pop_enclosing with no enclosing environment")
     }
 }

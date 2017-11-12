@@ -5,6 +5,7 @@ use std::rc::Rc;
 use time;
 
 use environment::Environment;
+use instance::LoxInstance;
 use interpreter::Interpreter;
 use parser::Stmt;
 use primitive::{Error, Value, ValueResult};
@@ -31,25 +32,31 @@ impl LoxCallable for Clock {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Function {
+    pub name: String,
+    pub parameters: Vec<String>,
+    pub body: Vec<Stmt>,
+}
+
+#[derive(Clone, Debug)]
 pub struct LoxFunction {
-    name: String,
-    parameters: Vec<String>,
-    body: Vec<Stmt>,
+    function: Function,
     closure: Rc<RefCell<Environment>>,
 }
 
 impl LoxFunction {
-    pub fn new(
-        name: String,
-        parameters: Vec<String>,
-        body: Vec<Stmt>,
-        closure: Rc<RefCell<Environment>>,
-    ) -> Self {
+    pub fn new(function: Function, closure: Rc<RefCell<Environment>>) -> Self {
+        Self { function, closure }
+    }
+
+    pub fn bind(&self, instance: LoxInstance) -> Self {
+        let mut env = Environment::new();
+        env.set_enclosing(Rc::clone(&self.closure));
+        env.define("this".into(), Value::Instance(instance));
         Self {
-            name,
-            parameters,
-            body,
-            closure,
+            function: self.function.clone(),
+            closure: Rc::new(RefCell::new(env)),
         }
     }
 }
@@ -67,7 +74,7 @@ impl LoxCallable for LoxFunction {
             .set_enclosing(Rc::clone(&self.closure));
 
         // Bind the parameters to the arguments the function was called with.
-        for (key, value) in self.parameters.iter().zip(arguments.iter()) {
+        for (key, value) in self.function.parameters.iter().zip(arguments.iter()) {
             interpreter
                 .env
                 .borrow_mut()
@@ -76,7 +83,7 @@ impl LoxCallable for LoxFunction {
 
         let mut result = Ok(());
 
-        for stmt in &self.body {
+        for stmt in &self.function.body {
             result = interpreter.exec_stmt(stmt);
             if result.is_err() {
                 break;
@@ -94,10 +101,10 @@ impl LoxCallable for LoxFunction {
     }
 
     fn arity(&self) -> usize {
-        self.parameters.len()
+        self.function.parameters.len()
     }
 
     fn name(&self) -> &str {
-        &self.name
+        &self.function.name
     }
 }

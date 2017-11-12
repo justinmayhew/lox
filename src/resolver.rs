@@ -3,22 +3,31 @@ use std::collections::HashMap;
 use parser::{Expr, Stmt};
 
 #[derive(Copy, Clone)]
-enum FnKind {
+enum FunctionKind {
     None,
     Function,
     Anonymous,
+    Method,
+}
+
+#[derive(Copy, Clone)]
+enum ClassKind {
+    None,
+    Class,
 }
 
 pub struct Resolver {
     scopes: Vec<HashMap<String, (bool, usize)>>,
-    current_fn: FnKind,
+    current_fn: FunctionKind,
+    current_class: ClassKind,
 }
 
 impl Resolver {
     pub fn new() -> Self {
         Self {
             scopes: Vec::new(),
-            current_fn: FnKind::None,
+            current_fn: FunctionKind::None,
+            current_class: ClassKind::None,
         }
     }
 
@@ -32,13 +41,35 @@ impl Resolver {
                 }
                 self.define(name.clone());
             }
-            Stmt::Fun(ref name, ref mut params, ref mut body) => {
-                self.declare(name.clone());
-                self.define(name.clone());
-                self.resolve_function(params, body, FnKind::Function);
+            Stmt::Fun(ref mut fun) => {
+                self.declare(fun.name.clone());
+                self.define(fun.name.clone());
+                self.resolve_function(&mut fun.parameters, &mut fun.body, FunctionKind::Function);
+            }
+            Stmt::Class(ref mut class) => {
+                self.declare(class.name.clone());
+                self.define(class.name.clone());
+
+                let enclosing_class = self.current_class;
+                self.current_class = ClassKind::Class;
+
+                self.begin_scope();
+                self.scopes
+                    .last_mut()
+                    .unwrap()
+                    .insert("this".into(), (true, 0));
+
+                for method in &mut class.methods {
+                    let declaration = FunctionKind::Method;
+                    self.resolve_function(&mut method.parameters, &mut method.body, declaration);
+                }
+
+                self.end_scope();
+
+                self.current_class = enclosing_class;
             }
             Stmt::Return(ref mut expr) => {
-                if let FnKind::None = self.current_fn {
+                if let FunctionKind::None = self.current_fn {
                     panic!("Cannot return from top-level code.");
                 }
 
@@ -98,13 +129,26 @@ impl Resolver {
                     self.resolve_expr(arg);
                 }
             }
-            Expr::AnonymousFun(ref mut params, ref mut body) => {
-                self.resolve_function(params, body, FnKind::Anonymous);
+            Expr::AnonymousFun(ref mut fun) => {
+                self.resolve_function(&mut fun.parameters, &mut fun.body, FunctionKind::Anonymous);
+            }
+            Expr::Get(ref mut expr, _) => {
+                self.resolve_expr(expr);
+            }
+            Expr::Set(ref mut object, _, ref mut value) => {
+                self.resolve_expr(value);
+                self.resolve_expr(object);
+            }
+            Expr::This(ref mut hops) => {
+                if let ClassKind::None = self.current_class {
+                    panic!("Cannot use 'this' outside of a class.");
+                }
+                self.resolve_local("this", hops);
             }
         }
     }
 
-    fn resolve_function(&mut self, params: &mut [String], body: &mut [Stmt], kind: FnKind) {
+    fn resolve_function(&mut self, params: &mut [String], body: &mut [Stmt], kind: FunctionKind) {
         let enclosing_fn = self.current_fn;
         self.current_fn = kind;
 
@@ -129,7 +173,7 @@ impl Resolver {
         {
             let scope = self.scopes.last_mut().unwrap();
             for (key, &(_, usages)) in scope.iter() {
-                if usages == 0 {
+                if usages == 0 && key != "this" {
                     eprintln!("Unused variable: {}", key);
                 }
             }

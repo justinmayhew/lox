@@ -1,6 +1,7 @@
 use std::fmt;
 use std::usize;
 
+use callable::Function;
 use primitive::Value;
 use scanner::Token;
 
@@ -75,7 +76,7 @@ impl fmt::Display for LogicOp {
 pub enum Expr {
     /// A binary expression, for example `1 + 2`.
     Binary(Box<Expr>, BinOp, Box<Expr>),
-    /// A logical expression, for example `foo == bar && foo == baz`.
+    /// A logical expression, for example `foo && bar`.
     Logical(Box<Expr>, LogicOp, Box<Expr>),
     /// A grouping expression, for example `(1)`.
     Grouping(Box<Expr>),
@@ -90,7 +91,13 @@ pub enum Expr {
     /// A function call, for example `f(1, 2)`.
     Call(Box<Expr>, Vec<Expr>),
     /// An anonymous function expression, for example `fun (a, b) { return a + b; }`.
-    AnonymousFun(Vec<String>, Vec<Stmt>),
+    AnonymousFun(Function),
+    /// A get expression, for example `point.x`.
+    Get(Box<Expr>, String),
+    /// A set expression, for example `point.x = 1`.
+    Set(Box<Expr>, String, Box<Expr>),
+    /// A this expression within a method.
+    This(usize),
 }
 
 impl fmt::Display for Expr {
@@ -104,9 +111,18 @@ impl fmt::Display for Expr {
             Expr::Var(ref name, _) => write!(f, "{}", name),
             Expr::VarAssign(ref name, ref expr, _) => write!(f, "{} = {}", name, expr),
             Expr::Call(ref callee, ref arguments) => write!(f, "({} {:?})", callee, arguments),
-            Expr::AnonymousFun(ref parameters, _) => write!(f, "(anonymous {:?})", parameters),
+            Expr::AnonymousFun(ref fun) => write!(f, "(anonymous {:?})", fun.parameters),
+            Expr::Get(ref expr, ref name) => write!(f, "{}.{}", expr, name),
+            Expr::Set(ref left, ref name, ref right) => write!(f, "{}.{} = {}", left, name, right),
+            Expr::This(_) => write!(f, "this"),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct Class {
+    pub name: String,
+    pub methods: Vec<Function>,
 }
 
 #[derive(Clone, Debug)]
@@ -118,7 +134,9 @@ pub enum Stmt {
     /// A variable declaration.
     VarDecl(String, Option<Expr>),
     /// A function declaration.
-    Fun(String, Vec<String>, Vec<Stmt>),
+    Fun(Function),
+    /// A class declaration.
+    Class(Class),
     /// A return statement.
     Return(Option<Expr>),
     /// A block statement.
@@ -314,7 +332,9 @@ impl Parser {
         let result = if self.advance_if(&Token::Var) {
             self.var_declaration()
         } else if self.advance_if(&Token::Fun) {
-            self.fun_declaration()
+            Ok(Stmt::Fun(self.fun_declaration()?))
+        } else if self.advance_if(&Token::Class) {
+            Ok(Stmt::Class(self.class_declaration()?))
         } else {
             self.statement()
         };
@@ -341,17 +361,25 @@ impl Parser {
         Ok(Stmt::VarDecl(name, initializer))
     }
 
-    fn fun_declaration(&mut self) -> ParseResult<Stmt> {
+    fn fun_declaration(&mut self) -> ParseResult<Function> {
         let name = self.consume_identifier()?;
         self.consume(&Token::LeftParen, "Expect '(' after fun name.")?;
         let (parameters, body) = self.fun_parameters_and_body()?;
-        Ok(Stmt::Fun(name, parameters, body))
+        Ok(Function {
+            name,
+            parameters,
+            body,
+        })
     }
 
-    fn fun_expression(&mut self) -> ParseResult<Expr> {
+    fn fun_expression(&mut self) -> ParseResult<Function> {
         self.consume(&Token::LeftParen, "Expect '(' after fun keyword.")?;
         let (parameters, body) = self.fun_parameters_and_body()?;
-        Ok(Expr::AnonymousFun(parameters, body))
+        Ok(Function {
+            name: "anonymous".into(),
+            parameters,
+            body,
+        })
     }
 
     fn fun_parameters_and_body(&mut self) -> ParseResult<(Vec<String>, Vec<Stmt>)> {
@@ -378,6 +406,19 @@ impl Parser {
         let body = self.block_statement()?;
 
         Ok((parameters, body))
+    }
+
+    fn class_declaration(&mut self) -> ParseResult<Class> {
+        let name = self.consume_identifier()?;
+        self.consume(&Token::LeftBrace, "Expect '{' after class name.")?;
+
+        let mut methods = Vec::new();
+        while !self.check(&Token::RightBrace) && !self.is_at_end() {
+            methods.push(self.fun_declaration()?);
+        }
+
+        self.consume(&Token::RightBrace, "Expect '}' after class declaration.")?;
+        Ok(Class { name, methods })
     }
 
     fn statement(&mut self) -> ParseResult<Stmt> {
@@ -513,6 +554,9 @@ impl Parser {
             if let Expr::Var(ref name, hops) = expr {
                 return Ok(Expr::VarAssign(name.clone(), Box::new(value), hops));
             }
+            if let Expr::Get(expr, name) = expr {
+                return Ok(Expr::Set(expr, name, Box::new(value)));
+            }
 
             return Err(ParseError::InvalidAssignment(expr));
         }
@@ -633,6 +677,9 @@ impl Parser {
         loop {
             if self.advance_if(&Token::LeftParen) {
                 expr = self.finish_call(expr)?;
+            } else if self.advance_if(&Token::Dot) {
+                let name = self.consume_identifier()?;
+                expr = Expr::Get(Box::new(expr), name);
             } else {
                 break;
             }
@@ -672,7 +719,10 @@ impl Parser {
             return Ok(Expr::Literal(Value::Nil));
         }
         if self.advance_if(&Token::Fun) {
-            return self.fun_expression();
+            return Ok(Expr::AnonymousFun(self.fun_expression()?));
+        }
+        if self.advance_if(&Token::This) {
+            return Ok(Expr::This(usize::MAX)); // TODO: find a more elegant place to put hops.
         }
 
         if let Some(i) = self.advance_if_int() {

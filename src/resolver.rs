@@ -6,6 +6,7 @@ use parser::{Expr, Stmt};
 enum FunctionKind {
     None,
     Function,
+    Initializer,
     Anonymous,
     Method,
 }
@@ -60,7 +61,11 @@ impl Resolver {
                     .insert("this".into(), (true, 0));
 
                 for method in &mut class.methods {
-                    let declaration = FunctionKind::Method;
+                    let declaration = if method.name == "init" {
+                        FunctionKind::Initializer
+                    } else {
+                        FunctionKind::Method
+                    };
                     self.resolve_function(&mut method.parameters, &mut method.body, declaration);
                 }
 
@@ -71,6 +76,9 @@ impl Resolver {
             Stmt::Return(ref mut expr) => {
                 if let FunctionKind::None = self.current_fn {
                     panic!("Cannot return from top-level code.");
+                }
+                if let FunctionKind::Initializer = self.current_fn {
+                    panic!("Cannot return from class initializer.");
                 }
 
                 if let Some(ref mut expr) = *expr {

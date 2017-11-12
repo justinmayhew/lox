@@ -43,11 +43,20 @@ pub struct Function {
 pub struct LoxFunction {
     function: Function,
     closure: Rc<RefCell<Environment>>,
+    is_initializer: bool,
 }
 
 impl LoxFunction {
-    pub fn new(function: Function, closure: Rc<RefCell<Environment>>) -> Self {
-        Self { function, closure }
+    pub fn new(
+        function: Function,
+        closure: Rc<RefCell<Environment>>,
+        is_initializer: bool,
+    ) -> Self {
+        Self {
+            function,
+            closure,
+            is_initializer,
+        }
     }
 
     pub fn bind(&self, instance: LoxInstance) -> Self {
@@ -57,6 +66,7 @@ impl LoxFunction {
         Self {
             function: self.function.clone(),
             closure: Rc::new(RefCell::new(env)),
+            is_initializer: self.is_initializer,
         }
     }
 }
@@ -88,6 +98,10 @@ impl LoxCallable for LoxFunction {
             if result.is_err() {
                 break;
             }
+        }
+
+        if self.is_initializer && result.is_ok() {
+            result = Err(Error::Return(interpreter.env.borrow().get_at("this", 1)));
         }
 
         // Restore previous environment.

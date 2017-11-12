@@ -57,7 +57,7 @@ impl Interpreter {
                 Ok(())
             }
             Stmt::Fun(ref fun) => {
-                let lox_function = LoxFunction::new(fun.clone(), Rc::clone(&self.env));
+                let lox_function = LoxFunction::new(fun.clone(), Rc::clone(&self.env), false);
                 self.env
                     .borrow_mut()
                     .define(fun.name.clone(), Value::Fun(Rc::new(lox_function)));
@@ -68,7 +68,11 @@ impl Interpreter {
 
                 let mut methods = HashMap::new();
                 for method in &class.methods {
-                    let func = LoxFunction::new(method.clone(), Rc::clone(&self.env));
+                    let func = LoxFunction::new(
+                        method.clone(),
+                        Rc::clone(&self.env),
+                        method.name == "init",
+                    );
                     methods.insert(method.name.clone(), Rc::new(func));
                 }
                 let lox_class = LoxClass::new(class.name.clone(), methods);
@@ -219,7 +223,7 @@ impl Interpreter {
                 }
             }
             Expr::AnonymousFun(ref fun) => {
-                let callable = LoxFunction::new(fun.clone(), Rc::clone(&self.env));
+                let callable = LoxFunction::new(fun.clone(), Rc::clone(&self.env), false);
                 Ok(Value::Fun(Rc::new(callable)))
             }
             Expr::Get(ref expr, ref name) => {

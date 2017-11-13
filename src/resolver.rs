@@ -17,8 +17,41 @@ enum ClassKind {
     Class,
 }
 
+struct Var {
+    initialized: bool,
+    usages: usize,
+}
+
+impl Var {
+    fn uninitialized() -> Self {
+        Self {
+            initialized: false,
+            usages: 0,
+        }
+    }
+
+    fn initialized() -> Self {
+        Self {
+            initialized: true,
+            usages: 0,
+        }
+    }
+
+    fn is_initialized(&self) -> bool {
+        self.initialized
+    }
+
+    fn is_used(&self) -> bool {
+        self.usages > 0
+    }
+
+    fn increment_usages(&mut self) {
+        self.usages += 1;
+    }
+}
+
 pub struct Resolver {
-    scopes: Vec<HashMap<String, (bool, usize)>>,
+    scopes: Vec<HashMap<String, Var>>,
     current_fn: FunctionKind,
     current_class: ClassKind,
 }
@@ -60,7 +93,7 @@ impl Resolver {
                 self.scopes
                     .last_mut()
                     .unwrap()
-                    .insert("this".into(), (true, 0));
+                    .insert("this".into(), Var::initialized());
 
                 for method in &mut class.methods {
                     let declaration = if method.name == "init" {
@@ -123,8 +156,10 @@ impl Resolver {
             Expr::Unary(_op, ref mut expr) => self.resolve_expr(expr),
             Expr::Var(ref name, ref mut hops) => {
                 if let Some(map) = self.scopes.last() {
-                    if map.get(name) == Some(&(false, 0)) {
-                        panic!("Cannot read local variable in its own initializer.");
+                    if let Some(var) = map.get(name) {
+                        if !var.is_initialized() {
+                            panic!("Cannot read local variable in its own initializer.");
+                        }
                     }
                 }
                 self.resolve_local(name, hops);
@@ -182,8 +217,8 @@ impl Resolver {
     fn end_scope(&mut self) {
         {
             let scope = self.scopes.last_mut().unwrap();
-            for (key, &(_, usages)) in scope.iter() {
-                if usages == 0 && key != "this" {
+            for (key, var) in scope.iter() {
+                if !var.is_used() && key != "this" {
                     eprintln!("Unused variable: {}", key);
                 }
             }
@@ -201,7 +236,7 @@ impl Resolver {
         if scope.contains_key(&name) {
             panic!("Variable with this name is already declared in this scope.");
         }
-        scope.insert(name, (false, 0));
+        scope.insert(name, Var::uninitialized());
     }
 
     fn define(&mut self, name: String) {
@@ -210,15 +245,15 @@ impl Resolver {
         }
 
         let scope = self.scopes.last_mut().unwrap();
-        scope.insert(name, (true, 0));
+        scope.insert(name, Var::initialized());
     }
 
     fn resolve_local(&mut self, name: &str, hops: &mut Option<usize>) {
         let len = self.scopes.len();
 
         for i in (0..len).rev() {
-            if let Some(ref mut init_and_usage) = self.scopes[i].get_mut(name) {
-                init_and_usage.1 += 1;
+            if let Some(ref mut var) = self.scopes[i].get_mut(name) {
+                var.increment_usages();
                 *hops = Some(len - 1 - i);
                 return;
             }

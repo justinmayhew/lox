@@ -79,13 +79,15 @@ pub struct Environment {
     inner: Rc<RefCell<Inner>>,
 }
 
-impl Environment {
-    pub fn new() -> Self {
+impl Default for Environment {
+    fn default() -> Self {
         Self {
             inner: Rc::new(RefCell::new(Inner::new())),
         }
     }
+}
 
+impl Environment {
     pub fn with_enclosing(enclosing: Environment) -> Self {
         Self {
             inner: Rc::new(RefCell::new(Inner::with_enclosing(enclosing))),

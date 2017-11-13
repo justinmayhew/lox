@@ -31,7 +31,6 @@ impl LoxClass {
         self.methods
             .borrow()
             .get(name)
-            .cloned()
             .map(|method| Rc::new(method.bind(instance)))
     }
 
@@ -44,12 +43,9 @@ impl LoxCallable for LoxClass {
     fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Value>) -> ValueResult {
         let instance = LoxInstance::new(self.clone());
 
-        if let Some(initializer) = self.initializer() {
-            initializer
-                .bind(instance.clone())
-                .call(interpreter, arguments)
-        } else {
-            Ok(Value::Instance(instance))
+        match self.initializer() {
+            Some(initializer) => initializer.bind(instance).call(interpreter, arguments),
+            None => Ok(Value::Instance(instance)),
         }
     }
 

@@ -71,10 +71,10 @@ impl LoxCallable for LoxFunction {
             env.define(key.clone(), value.clone());
         }
 
-        let mut result = interpreter.execute_block(&self.function.body, env.clone());
+        let result = interpreter.execute_block(&self.function.body, env.clone());
 
         if self.is_initializer && result.is_ok() {
-            result = Err(Error::Return(env.get_at("this", 1)));
+            return Ok(env.get_at("this", 1));
         }
 
         match result {

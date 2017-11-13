@@ -23,15 +23,17 @@ pub struct Resolver {
     current_class: ClassKind,
 }
 
-impl Resolver {
-    pub fn new() -> Self {
+impl Default for Resolver {
+    fn default() -> Self {
         Self {
             scopes: Vec::new(),
             current_fn: FunctionKind::None,
             current_class: ClassKind::None,
         }
     }
+}
 
+impl Resolver {
     pub fn resolve_stmt(&mut self, stmt: &mut Stmt) {
         match *stmt {
             Stmt::Expr(ref mut expr) | Stmt::Print(ref mut expr) => self.resolve_expr(expr),

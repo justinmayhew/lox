@@ -37,26 +37,23 @@ fn execute_file(filename: &str) {
     let mut parser = Parser::new(tokens);
     let mut stmts = parser.parse().expect("error parsing file");
 
-    let mut interpreter = Interpreter::new();
-
-    let mut resolver = Resolver::new();
+    let mut resolver = Resolver::default();
     for stmt in &mut stmts {
         resolver.resolve_stmt(stmt);
     }
 
-    interpreter
+    Interpreter::default()
         .execute(&stmts)
         .expect("error executing program");
 }
 
 fn repl() {
-    let mut interpreter = Interpreter::new();
-
     let mut rl = Editor::<()>::new();
     if rl.load_history(HISTORY_FILE).is_err() {
         println!("No previous history.");
     }
 
+    let mut interpreter = Interpreter::default();
     loop {
         match rl.readline("> ") {
             Ok(line) => {
@@ -75,13 +72,13 @@ fn repl() {
 }
 
 fn execute_line(interpreter: &mut Interpreter, line: &str) {
-    let mut scanner = Scanner::new(line);
-    let tokens = scanner.scan_all();
+    let tokens = Scanner::new(line).scan_all();
+    let len = tokens.len();
+    let is_expression = len >= 2 && tokens[len - 2] != Token::Semicolon;
+    let mut parser = Parser::new(tokens);
 
-    let ntokens = tokens.len();
-    if ntokens >= 2 && tokens[ntokens - 2] != Token::Semicolon {
-        // Evaluate a single expr
-        let mut parser = Parser::new(tokens);
+    if is_expression {
+        // Evaluate and print the result of a single expression.
         match parser.expression() {
             Ok(expr) => match interpreter.evaluate(&expr) {
                 Ok(value) => println!("{}", value),
@@ -90,8 +87,7 @@ fn execute_line(interpreter: &mut Interpreter, line: &str) {
             Err(e) => eprintln!("Parse error: {}", e),
         }
     } else {
-        // Evaluate a list of stmts
-        let mut parser = Parser::new(tokens);
+        // Evaluate a list of statements.
         match parser.parse() {
             Ok(stmts) => if let Err(e) = interpreter.execute(&stmts) {
                 eprintln!("Interpreter error: {:?}", e);

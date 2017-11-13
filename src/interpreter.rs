@@ -17,9 +17,9 @@ pub struct Interpreter {
     env: Environment,
 }
 
-impl Interpreter {
-    pub fn new() -> Self {
-        let mut env = Environment::new();
+impl Default for Interpreter {
+    fn default() -> Self {
+        let mut env = Environment::default();
         env.define("clock".into(), Value::Fun(Rc::new(Clock)));
 
         Self {
@@ -27,7 +27,9 @@ impl Interpreter {
             env: env,
         }
     }
+}
 
+impl Interpreter {
     pub fn execute(&mut self, stmts: &[Stmt]) -> Result<()> {
         for stmt in stmts {
             self.exec_stmt(stmt)?;

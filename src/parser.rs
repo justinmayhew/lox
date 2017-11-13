@@ -1,5 +1,4 @@
 use std::fmt;
-use std::usize;
 
 use callable::Function;
 use primitive::Value;
@@ -85,9 +84,9 @@ pub enum Expr {
     /// A unary expression, for example `!true`.
     Unary(UnaryOp, Box<Expr>),
     /// A variable expression, for example `name`.
-    Var(String, usize),
+    Var(String, Option<usize>),
     /// An assignment expression, for example `a = 5`.
-    VarAssign(String, Box<Expr>, usize),
+    VarAssign(String, Box<Expr>, Option<usize>),
     /// A function call, for example `f(1, 2)`.
     Call(Box<Expr>, Vec<Expr>),
     /// An anonymous function expression, for example `fun (a, b) { return a + b; }`.
@@ -97,7 +96,7 @@ pub enum Expr {
     /// A set expression, for example `point.x = 1`.
     Set(Box<Expr>, String, Box<Expr>),
     /// A this expression within a method.
-    This(usize),
+    This(Option<usize>),
 }
 
 impl fmt::Display for Expr {
@@ -722,7 +721,7 @@ impl Parser {
             return Ok(Expr::AnonymousFun(self.fun_expression()?));
         }
         if self.advance_if(&Token::This) {
-            return Ok(Expr::This(usize::MAX)); // TODO: find a more elegant place to put hops.
+            return Ok(Expr::This(None));
         }
 
         if let Some(i) = self.advance_if_int() {
@@ -732,7 +731,7 @@ impl Parser {
             return Ok(Expr::Literal(Value::Str(s)));
         }
         if let Some(s) = self.advance_if_identifier() {
-            return Ok(Expr::Var(s, usize::MAX));
+            return Ok(Expr::Var(s, None));
         }
 
         if self.advance_if(&Token::LeftParen) {

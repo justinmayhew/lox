@@ -213,13 +213,13 @@ impl Resolver {
         scope.insert(name, (true, 0));
     }
 
-    fn resolve_local(&mut self, name: &str, hops: &mut usize) {
+    fn resolve_local(&mut self, name: &str, hops: &mut Option<usize>) {
         let len = self.scopes.len();
 
         for i in (0..len).rev() {
             if let Some(ref mut init_and_usage) = self.scopes[i].get_mut(name) {
                 init_and_usage.1 += 1;
-                *hops = len - 1 - i;
+                *hops = Some(len - 1 - i);
                 return;
             }
         }

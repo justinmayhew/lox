@@ -166,15 +166,16 @@ impl Interpreter {
             Expr::VarAssign(ref name, ref expr, hops) => {
                 let value = self.evaluate(expr)?;
 
-                if hops == usize::MAX {
-                    if self.globals.assign(name, value.clone()) {
+                match hops {
+                    Some(hops) => {
+                        self.env.assign_at(name, value.clone(), hops);
+                        Ok(value)
+                    }
+                    None => if self.globals.assign(name, value.clone()) {
                         Ok(value)
                     } else {
                         Err(Error::UndefinedVar(name.clone()))
-                    }
-                } else {
-                    self.env.assign_at(name, value.clone(), hops);
-                    Ok(value)
+                    },
                 }
             }
             Expr::Call(ref callee, ref argument_exprs) => {
@@ -243,17 +244,13 @@ impl Interpreter {
         result
     }
 
-    fn look_up_variable(&self, name: &str, hops: usize) -> ValueResult {
-        if hops == usize::MAX {
-            // Global
-            match self.globals.get(name) {
+    fn look_up_variable(&self, name: &str, hops: Option<usize>) -> ValueResult {
+        match hops {
+            Some(hops) => Ok(self.env.get_at(name, hops)),
+            None => match self.globals.get(name) {
                 Some(value) => Ok(value),
                 None => Err(Error::UndefinedVar(name.into())),
-            }
-        } else {
-            // Non-global
-            let value = self.env.get_at(name, hops);
-            Ok(value)
+            },
         }
     }
 }

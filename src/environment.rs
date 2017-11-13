@@ -4,75 +4,111 @@ use std::rc::Rc;
 
 use primitive::Value;
 
-#[derive(Clone, Debug)]
-pub struct Environment {
-    enclosing: Option<Rc<RefCell<Environment>>>,
+#[derive(Debug)]
+struct Inner {
+    enclosing: Option<Environment>,
     values: HashMap<String, Value>,
 }
 
-impl Environment {
-    pub fn new() -> Self {
-        Environment {
+impl Inner {
+    fn new() -> Self {
+        Self {
             enclosing: None,
             values: HashMap::new(),
         }
     }
 
-    pub fn define(&mut self, key: String, value: Value) {
+    fn with_enclosing(enclosing: Environment) -> Self {
+        Self {
+            enclosing: Some(enclosing),
+            values: HashMap::new(),
+        }
+    }
+
+    fn define(&mut self, key: String, value: Value) {
         self.values.insert(key, value);
     }
 
     /// Returns `true` if the variable previously been defined.
-    pub fn assign(&mut self, key: &str, value: Value) -> bool {
+    fn assign(&mut self, key: &str, value: Value) -> bool {
         if self.values.contains_key(key) {
             self.values.insert(key.into(), value);
             true
         } else {
             match self.enclosing {
-                Some(ref mut env) => env.borrow_mut().assign(key, value),
+                Some(ref mut env) => env.assign(key, value),
                 None => false,
             }
         }
     }
 
-    pub fn assign_at(&mut self, key: &str, value: Value, hops: usize) {
+    fn assign_at(&mut self, key: &str, value: Value, hops: usize) {
         if hops == 0 {
             assert!(self.values.contains_key(key));
             self.values.insert(key.into(), value);
-        } else if let Some(ref env) = self.enclosing {
-            env.borrow_mut().assign_at(key, value, hops - 1)
+        } else if let Some(ref mut env) = self.enclosing {
+            env.assign_at(key, value, hops - 1)
         } else {
             panic!("not enough environments to hop to");
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<Value> {
+    fn get(&self, key: &str) -> Option<Value> {
         self.values
             .get(key)
             .cloned()
             .or_else(|| match self.enclosing {
-                Some(ref env) => env.borrow().get(key),
+                Some(ref env) => env.get(key),
                 None => None,
             })
     }
 
-    pub fn get_at(&self, key: &str, hops: usize) -> Value {
+    fn get_at(&self, key: &str, hops: usize) -> Value {
         if hops == 0 {
             self.get(key).expect("variable not defined")
         } else if let Some(ref env) = self.enclosing {
-            env.borrow().get_at(key, hops - 1)
+            env.get_at(key, hops - 1)
         } else {
             panic!("not enough environments to hop to");
         }
     }
+}
 
-    pub fn set_enclosing(&mut self, enclosing: Rc<RefCell<Environment>>) {
-        self.enclosing = Some(enclosing);
+#[derive(Clone, Debug)]
+pub struct Environment {
+    inner: Rc<RefCell<Inner>>,
+}
+
+impl Environment {
+    pub fn new() -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(Inner::new())),
+        }
     }
 
-    pub fn pop_enclosing(&mut self) -> Rc<RefCell<Environment>> {
-        self.enclosing
-            .take()
-            .expect("pop_enclosing with no enclosing environment")
+    pub fn with_enclosing(enclosing: Environment) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(Inner::with_enclosing(enclosing))),
+        }
+    }
+
+    pub fn define(&mut self, key: String, value: Value) {
+        self.inner.borrow_mut().define(key, value);
+    }
+
+    pub fn assign(&mut self, key: &str, value: Value) -> bool {
+        self.inner.borrow_mut().assign(key, value)
+    }
+
+    pub fn assign_at(&mut self, key: &str, value: Value, hops: usize) {
+        self.inner.borrow_mut().assign_at(key, value, hops);
+    }
+
+    pub fn get(&self, key: &str) -> Option<Value> {
+        self.inner.borrow().get(key)
+    }
+
+    pub fn get_at(&self, key: &str, hops: usize) -> Value {
+        self.inner.borrow().get_at(key, hops)
     }
 }

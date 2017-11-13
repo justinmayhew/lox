@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
@@ -14,20 +13,19 @@ use parser::{BinOp, Expr, LogicOp, Stmt, UnaryOp};
 use primitive::{Error, Result, Value, ValueResult};
 
 pub struct Interpreter {
-    globals: Rc<RefCell<Environment>>,
-    pub env: Rc<RefCell<Environment>>,
+    globals: Environment,
+    env: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         let mut env = Environment::new();
-
         env.define("clock".into(), Value::Fun(Rc::new(Clock)));
 
-        let env = Rc::new(RefCell::new(env));
-        let globals = Rc::clone(&env);
-
-        Self { globals, env }
+        Self {
+            globals: env.clone(),
+            env: env,
+        }
     }
 
     pub fn execute(&mut self, stmts: &[Stmt]) -> Result<()> {
@@ -53,33 +51,26 @@ impl Interpreter {
                     None => Value::Nil,
                 };
 
-                self.env.borrow_mut().define(name.clone(), value);
+                self.env.define(name.clone(), value);
                 Ok(())
             }
             Stmt::Fun(ref fun) => {
-                let lox_function = LoxFunction::new(fun.clone(), Rc::clone(&self.env), false);
-                self.env
-                    .borrow_mut()
-                    .define(fun.name.clone(), Value::Fun(Rc::new(lox_function)));
+                let func = LoxFunction::new(fun.clone(), self.env.clone(), false);
+                self.env.define(fun.name.clone(), Value::Fun(Rc::new(func)));
                 Ok(())
             }
             Stmt::Class(ref class) => {
-                self.env.borrow_mut().define(class.name.clone(), Value::Nil);
+                self.env.define(class.name.clone(), Value::Nil);
 
                 let mut methods = HashMap::new();
                 for method in &class.methods {
-                    let func = LoxFunction::new(
-                        method.clone(),
-                        Rc::clone(&self.env),
-                        method.name == "init",
-                    );
+                    let func =
+                        LoxFunction::new(method.clone(), self.env.clone(), method.name == "init");
                     methods.insert(method.name.clone(), Rc::new(func));
                 }
                 let lox_class = LoxClass::new(class.name.clone(), methods);
 
-                self.env
-                    .borrow_mut()
-                    .assign(&class.name, Value::Class(lox_class));
+                self.env.assign(&class.name, Value::Class(lox_class));
                 Ok(())
             }
             Stmt::Return(ref expr) => {
@@ -92,26 +83,8 @@ impl Interpreter {
                 Err(Error::Return(value))
             }
             Stmt::Block(ref stmts) => {
-                // Set up new environment for this block.
-                let previous =
-                    mem::replace(&mut self.env, Rc::new(RefCell::new(Environment::new())));
-                self.env.borrow_mut().set_enclosing(previous);
-
-                let mut result = Ok(());
-
-                for stmt in stmts {
-                    result = self.exec_stmt(stmt);
-                    if result.is_err() {
-                        break;
-                    }
-                }
-
-                // Restore previous environment.
-                let env = mem::replace(&mut self.env, Rc::new(RefCell::new(Environment::new())));
-                let previous = env.borrow_mut().pop_enclosing();
-                self.env = previous;
-
-                result
+                let env = Environment::with_enclosing(self.env.clone());
+                self.execute_block(stmts, env)
             }
             Stmt::If(ref condition, ref then_branch, ref else_branch) => {
                 if is_truthy(&self.evaluate(condition)?) {
@@ -192,13 +165,13 @@ impl Interpreter {
                 let value = self.evaluate(expr)?;
 
                 if hops == usize::MAX {
-                    if self.globals.borrow_mut().assign(name, value.clone()) {
+                    if self.globals.assign(name, value.clone()) {
                         Ok(value)
                     } else {
                         Err(Error::UndefinedVar(name.clone()))
                     }
                 } else {
-                    self.env.borrow_mut().assign_at(name, value.clone(), hops);
+                    self.env.assign_at(name, value.clone(), hops);
                     Ok(value)
                 }
             }
@@ -223,7 +196,7 @@ impl Interpreter {
                 }
             }
             Expr::AnonymousFun(ref fun) => {
-                let callable = LoxFunction::new(fun.clone(), Rc::clone(&self.env), false);
+                let callable = LoxFunction::new(fun.clone(), self.env.clone(), false);
                 Ok(Value::Fun(Rc::new(callable)))
             }
             Expr::Get(ref expr, ref name) => {
@@ -252,16 +225,32 @@ impl Interpreter {
         }
     }
 
+    pub fn execute_block(&mut self, block: &[Stmt], env: Environment) -> Result<()> {
+        let previous = mem::replace(&mut self.env, env);
+
+        let mut result = Ok(());
+        for stmt in block {
+            result = self.exec_stmt(stmt);
+            if result.is_err() {
+                break;
+            }
+        }
+
+        // Restore previous environment.
+        self.env = previous;
+        result
+    }
+
     fn look_up_variable(&self, name: &str, hops: usize) -> ValueResult {
         if hops == usize::MAX {
             // Global
-            match self.globals.borrow().get(name) {
+            match self.globals.get(name) {
                 Some(value) => Ok(value),
                 None => Err(Error::UndefinedVar(name.into())),
             }
         } else {
             // Non-global
-            let value = self.env.borrow().get_at(name, hops);
+            let value = self.env.get_at(name, hops);
             Ok(value)
         }
     }

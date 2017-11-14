@@ -52,7 +52,7 @@ impl LoxFunction {
     }
 
     pub fn bind(&self, instance: LoxInstance) -> Self {
-        let mut env = Environment::with_enclosing(self.closure.clone());
+        let env = Environment::with_enclosing(self.closure.clone());
         env.define("this".into(), Value::Instance(instance));
         Self {
             function: self.function.clone(),
@@ -64,7 +64,7 @@ impl LoxFunction {
 
 impl LoxCallable for LoxFunction {
     fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Value>) -> ValueResult {
-        let mut env = Environment::with_enclosing(self.closure.clone());
+        let env = Environment::with_enclosing(self.closure.clone());
 
         // Bind the parameters to the arguments the function was called with.
         for (key, value) in self.function.parameters.iter().zip(arguments.iter()) {

@@ -19,7 +19,7 @@ pub struct Interpreter {
 
 impl Default for Interpreter {
     fn default() -> Self {
-        let mut env = Environment::default();
+        let env = Environment::default();
         env.define("clock".into(), Value::Fun(Rc::new(Clock)));
 
         Self {

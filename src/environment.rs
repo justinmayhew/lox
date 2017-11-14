@@ -94,15 +94,15 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, key: String, value: Value) {
+    pub fn define(&self, key: String, value: Value) {
         self.inner.borrow_mut().define(key, value);
     }
 
-    pub fn assign(&mut self, key: &str, value: Value) -> bool {
+    pub fn assign(&self, key: &str, value: Value) -> bool {
         self.inner.borrow_mut().assign(key, value)
     }
 
-    pub fn assign_at(&mut self, key: &str, value: Value, hops: usize) {
+    pub fn assign_at(&self, key: &str, value: Value, hops: usize) {
         self.inner.borrow_mut().assign_at(key, value, hops);
     }
 

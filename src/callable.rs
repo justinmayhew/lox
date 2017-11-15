@@ -3,7 +3,7 @@ use time;
 use environment::Environment;
 use instance::LoxInstance;
 use interpreter::Interpreter;
-use parser::Stmt;
+use parser::Function;
 use primitive::{Error, Value, ValueResult};
 
 pub trait LoxCallable {
@@ -26,13 +26,6 @@ impl LoxCallable for Clock {
     fn name(&self) -> &str {
         "clock"
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct Function {
-    pub name: String,
-    pub parameters: Vec<String>,
-    pub body: Vec<Stmt>,
 }
 
 #[derive(Clone, Debug)]

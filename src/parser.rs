@@ -1,6 +1,5 @@
 use std::fmt;
 
-use callable::Function;
 use primitive::Value;
 use scanner::Token;
 
@@ -116,6 +115,13 @@ impl fmt::Display for Expr {
             Expr::This(_) => write!(f, "this"),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct Function {
+    pub name: String,
+    pub parameters: Vec<String>,
+    pub body: Vec<Stmt>,
 }
 
 #[derive(Clone, Debug)]

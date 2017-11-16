@@ -5,13 +5,13 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 
-use rustyline::error::ReadlineError;
 use rustyline::Editor;
+use rustyline::error::ReadlineError;
 
-use lox::parser::*;
-use lox::scanner::*;
-use lox::interpreter::*;
-use lox::resolver::*;
+use lox::interpreter::Interpreter;
+use lox::parser::Parser;
+use lox::resolver::Resolver;
+use lox::scanner::{Scanner, Token};
 
 fn main() {
     if let Some(filename) = env::args().nth(1) {

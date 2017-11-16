@@ -13,8 +13,6 @@ use lox::scanner::*;
 use lox::interpreter::*;
 use lox::resolver::*;
 
-static HISTORY_FILE: &'static str = ".lox_history";
-
 fn main() {
     if let Some(filename) = env::args().nth(1) {
         execute_file(&filename);
@@ -49,8 +47,10 @@ fn execute_file(filename: &str) {
 
 fn repl() {
     let mut rl = Editor::<()>::new();
-    if rl.load_history(HISTORY_FILE).is_err() {
-        println!("No previous history.");
+
+    let history_path = format!("{}/.lox_history", env::var("HOME").unwrap());
+    if rl.load_history(&history_path).is_err() {
+        // No previous history, ignoring.
     }
 
     let mut interpreter = Interpreter::default();
@@ -68,7 +68,7 @@ fn repl() {
         }
     }
 
-    rl.save_history(HISTORY_FILE).unwrap();
+    rl.save_history(&history_path).unwrap();
 }
 
 fn execute_line(interpreter: &mut Interpreter, line: &str) {

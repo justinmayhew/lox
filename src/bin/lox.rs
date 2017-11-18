@@ -9,9 +9,9 @@ use rustyline::Editor;
 use rustyline::error::ReadlineError;
 
 use lox::interpreter::Interpreter;
-use lox::parser::Parser;
-use lox::resolver::Resolver;
-use lox::scanner::{Scanner, Token};
+use lox::parser::{Parser, Stmt};
+use lox::resolver::resolve;
+use lox::scanner::Scanner;
 
 fn main() {
     if let Some(filename) = env::args().nth(1) {
@@ -35,10 +35,7 @@ fn execute_file(filename: &str) {
     let mut parser = Parser::new(tokens);
     let mut stmts = parser.parse().expect("error parsing file");
 
-    let mut resolver = Resolver::default();
-    for stmt in &mut stmts {
-        resolver.resolve_stmt(stmt);
-    }
+    resolve(&mut stmts);
 
     Interpreter::default()
         .execute(&stmts)
@@ -72,27 +69,22 @@ fn repl() {
 }
 
 fn execute_line(interpreter: &mut Interpreter, line: &str) {
-    let tokens = Scanner::new(line).scan_all();
-    let len = tokens.len();
-    let is_expression = len >= 2 && tokens[len - 2] != Token::Semicolon;
-    let mut parser = Parser::new(tokens);
+    let mut parser = Parser::new(Scanner::new(line).scan_all());
 
-    if is_expression {
-        // Evaluate and print the result of a single expression.
-        match parser.expression() {
-            Ok(expr) => match interpreter.evaluate(&expr) {
-                Ok(value) => println!("{}", value),
-                Err(e) => eprintln!("Error evaluating expression: {:?}", e),
-            },
-            Err(e) => eprintln!("Parse error: {}", e),
-        }
+    let mut stmts = if let Ok(expr) = parser.expression() {
+        vec![Stmt::Print(expr)]
     } else {
-        // Evaluate a list of statements.
-        match parser.parse() {
-            Ok(stmts) => if let Err(e) = interpreter.execute(&stmts) {
-                eprintln!("Interpreter error: {:?}", e);
-            },
-            Err(e) => eprintln!("Parse error: {}", e),
+        match parser.reset().parse() {
+            Ok(stmts) => stmts,
+            Err(err) => {
+                eprintln!("Parse error: {}", err);
+                return;
+            }
         }
+    };
+
+    resolve(&mut stmts);
+    if let Err(err) = interpreter.execute(&stmts) {
+        eprintln!("{}", err);
     }
 }

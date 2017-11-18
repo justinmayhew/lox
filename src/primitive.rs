@@ -1,3 +1,4 @@
+use std::fmt;
 use std::rc::Rc;
 use std::result;
 
@@ -24,6 +25,21 @@ pub enum Error {
     DivideByZero,
     UndefinedVar(String),
     ArityError(String),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Return(ref value) => write!(f, "Return {}", value),
+            Error::RuntimeError(ref msg) => write!(f, "RuntimeError {}", msg),
+            Error::TypeError(ref msg) => write!(f, "TypeError {}", msg),
+            Error::DivideByZero => write!(f, "DivideByZero: division by zero"),
+            Error::UndefinedVar(ref name) => {
+                write!(f, "UndefinedVar: name '{}' is not defined", name)
+            }
+            Error::ArityError(ref msg) => write!(f, "ArityError: {}", msg),
+        }
+    }
 }
 
 pub type Result<T> = result::Result<T, Error>;

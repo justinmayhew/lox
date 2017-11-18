@@ -191,6 +191,11 @@ impl Parser {
         Self { tokens, pos: 0 }
     }
 
+    pub fn reset(&mut self) -> &mut Self {
+        self.pos = 0;
+        self
+    }
+
     pub fn parse(&mut self) -> ParseResult<Vec<Stmt>> {
         let mut stmts = Vec::new();
 

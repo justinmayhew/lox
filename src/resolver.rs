@@ -2,6 +2,13 @@ use std::collections::HashMap;
 
 use parser::{Expr, Stmt};
 
+pub fn resolve(stmts: &mut [Stmt]) {
+    let mut resolver = Resolver::default();
+    for stmt in stmts {
+        resolver.resolve_stmt(stmt);
+    }
+}
+
 #[derive(Copy, Clone)]
 enum FunctionKind {
     None,
@@ -50,7 +57,7 @@ impl Var {
     }
 }
 
-pub struct Resolver {
+struct Resolver {
     scopes: Vec<HashMap<String, Var>>,
     current_fn: FunctionKind,
     current_class: ClassKind,
@@ -67,7 +74,7 @@ impl Default for Resolver {
 }
 
 impl Resolver {
-    pub fn resolve_stmt(&mut self, stmt: &mut Stmt) {
+    fn resolve_stmt(&mut self, stmt: &mut Stmt) {
         match *stmt {
             Stmt::Expr(ref mut expr) | Stmt::Print(ref mut expr) => self.resolve_expr(expr),
             Stmt::VarDecl(ref name, ref mut expr) => {

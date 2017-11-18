@@ -37,7 +37,7 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn exec_stmt(&mut self, stmt: &Stmt) -> Result<()> {
+    fn exec_stmt(&mut self, stmt: &Stmt) -> Result<()> {
         match *stmt {
             Stmt::Expr(ref expr) => {
                 self.evaluate(expr)?;
@@ -105,7 +105,7 @@ impl Interpreter {
         }
     }
 
-    pub fn evaluate(&mut self, expr: &Expr) -> ValueResult {
+    fn evaluate(&mut self, expr: &Expr) -> ValueResult {
         match *expr {
             Expr::Binary(ref left_expr, op, ref right_expr) => {
                 let left = self.evaluate(left_expr)?;

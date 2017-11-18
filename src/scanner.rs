@@ -205,22 +205,14 @@ impl<'s> Scanner<'s> {
     }
 
     fn peek(&mut self) -> Option<char> {
-        if let Some(c) = self.peek {
-            Some(c)
-        } else if let Some(c) = self.src.next() {
-            self.peek = Some(c);
-            Some(c)
-        } else {
-            None
-        }
+        self.peek.or_else(|| {
+            self.peek = self.src.next();
+            self.peek
+        })
     }
 
     fn get(&mut self) -> Option<char> {
-        if let Some(c) = self.peek.take() {
-            Some(c)
-        } else {
-            self.src.next()
-        }
+        self.peek.take().or_else(|| self.src.next())
     }
 
     fn eat_line(&mut self) {
@@ -246,27 +238,25 @@ impl<'s> Scanner<'s> {
 
         let mut s = String::new();
 
-        loop {
-            match self.get() {
-                Some(c) => {
-                    if c == '"' {
-                        return Ok(s);
-                    }
-                    s.push(c);
-                }
-                None => return Err(ScanError::UnclosedStr),
+        while let Some(c) = self.get() {
+            if c == '"' {
+                return Ok(s);
             }
+            s.push(c);
         }
+
+        Err(ScanError::UnclosedStr)
     }
 
     fn eat_int(&mut self) -> ScanResult<i64> {
         let mut s = String::new();
         s.push(self.get().unwrap());
 
-        loop {
-            match self.peek() {
-                Some(c) if is_digit(c) => s.push(self.get().unwrap()),
-                _ => break,
+        while let Some(c) = self.peek() {
+            if is_digit(c) {
+                s.push(self.get().unwrap())
+            } else {
+                break;
             }
         }
 
@@ -277,12 +267,11 @@ impl<'s> Scanner<'s> {
         let mut s = String::new();
         s.push(self.get().unwrap());
 
-        loop {
-            match self.peek() {
-                Some(c) if is_alpha_numeric_or_underscore(c) => {
-                    s.push(self.get().unwrap());
-                }
-                _ => break,
+        while let Some(c) = self.peek() {
+            if is_alpha_numeric_or_underscore(c) {
+                s.push(self.get().unwrap());
+            } else {
+                break;
             }
         }
 

@@ -75,7 +75,7 @@ impl<'s> Scanner<'s> {
         }
     }
 
-    pub fn scan_all(&mut self) -> Vec<Token> {
+    pub fn scan(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
 
         loop {
@@ -96,123 +96,71 @@ impl<'s> Scanner<'s> {
     }
 
     pub fn next_token(&mut self) -> ScanResult<Token> {
-        loop {
-            self.eat_whitespace();
+        self.eat_whitespace();
 
-            match self.peek() {
-                Some('(') => {
-                    self.get().unwrap();
-                    return Ok(Token::LeftParen);
-                }
-                Some(')') => {
-                    self.get().unwrap();
-                    return Ok(Token::RightParen);
-                }
-                Some('{') => {
-                    self.get().unwrap();
-                    return Ok(Token::LeftBrace);
-                }
-                Some('}') => {
-                    self.get().unwrap();
-                    return Ok(Token::RightBrace);
-                }
-                Some(',') => {
-                    self.get().unwrap();
-                    return Ok(Token::Comma);
-                }
-                Some('.') => {
-                    self.get().unwrap();
-                    return Ok(Token::Dot);
-                }
-                Some('-') => {
-                    self.get().unwrap();
-                    return Ok(Token::Minus);
-                }
-                Some('+') => {
-                    self.get().unwrap();
-                    return Ok(Token::Plus);
-                }
-                Some(';') => {
-                    self.get().unwrap();
-                    return Ok(Token::Semicolon);
-                }
-                Some('*') => {
-                    self.get().unwrap();
-                    return Ok(Token::Star);
-                }
-                Some('!') => {
-                    self.get().unwrap();
-
-                    return match self.peek() {
-                        Some('=') => {
-                            self.get().unwrap();
-                            Ok(Token::BangEqual)
-                        }
-                        _ => Ok(Token::Bang),
-                    };
-                }
-                Some('=') => {
-                    self.get().unwrap();
-
-                    return match self.peek() {
-                        Some('=') => {
-                            self.get().unwrap();
-                            Ok(Token::EqualEqual)
-                        }
-                        _ => Ok(Token::Equal),
-                    };
-                }
-                Some('<') => {
-                    self.get().unwrap();
-
-                    return match self.peek() {
-                        Some('=') => {
-                            self.get().unwrap();
-                            Ok(Token::LessEqual)
-                        }
-                        _ => Ok(Token::Less),
-                    };
-                }
-                Some('>') => {
-                    self.get().unwrap();
-
-                    return match self.peek() {
-                        Some('=') => {
-                            self.get().unwrap();
-                            Ok(Token::GreaterEqual)
-                        }
-                        _ => Ok(Token::Greater),
-                    };
-                }
-                Some('/') => {
-                    self.get().unwrap();
-
-                    match self.peek() {
-                        Some('/') => {
-                            self.get().unwrap();
-                            self.eat_line();
-                        }
-                        _ => return Ok(Token::Slash),
-                    }
-                }
-                Some('"') => return Ok(Token::Str(self.eat_str()?)),
-                Some(c) if is_digit(c) => return Ok(Token::Int(self.eat_int()?)),
-                Some(c) if is_alpha_or_underscore(c) => return self.eat_identifier_or_keyword(),
-                Some(c) => panic!("unexpected char: {}", c),
-                None => return Ok(Token::Eof),
-            }
+        match self.get() {
+            Some('(') => Ok(Token::LeftParen),
+            Some(')') => Ok(Token::RightParen),
+            Some('{') => Ok(Token::LeftBrace),
+            Some('}') => Ok(Token::RightBrace),
+            Some(',') => Ok(Token::Comma),
+            Some('.') => Ok(Token::Dot),
+            Some('-') => Ok(Token::Minus),
+            Some('+') => Ok(Token::Plus),
+            Some(';') => Ok(Token::Semicolon),
+            Some('*') => Ok(Token::Star),
+            Some('!') => Ok(if self.next_is('=') {
+                Token::BangEqual
+            } else {
+                Token::Bang
+            }),
+            Some('=') => Ok(if self.next_is('=') {
+                Token::EqualEqual
+            } else {
+                Token::Equal
+            }),
+            Some('<') => Ok(if self.next_is('=') {
+                Token::LessEqual
+            } else {
+                Token::Less
+            }),
+            Some('>') => Ok(if self.next_is('=') {
+                Token::GreaterEqual
+            } else {
+                Token::Greater
+            }),
+            Some('/') => if self.next_is('/') {
+                self.eat_line();
+                self.next_token()
+            } else {
+                Ok(Token::Slash)
+            },
+            Some(c) => if c == '"' {
+                Ok(Token::Str(self.eat_str()?))
+            } else if is_digit(c) {
+                Ok(Token::Int(self.eat_int(c)?))
+            } else if is_alpha_or_underscore(c) {
+                self.eat_identifier_or_keyword(c)
+            } else {
+                panic!("Unexpected character: {}", c);
+            },
+            None => Ok(Token::Eof),
         }
-    }
-
-    fn peek(&mut self) -> Option<char> {
-        self.peek.or_else(|| {
-            self.peek = self.src.next();
-            self.peek
-        })
     }
 
     fn get(&mut self) -> Option<char> {
         self.peek.take().or_else(|| self.src.next())
+    }
+
+    fn next_is(&mut self, expected: char) -> bool {
+        if let Some(c) = self.get() {
+            if c == expected {
+                return true;
+            } else {
+                self.peek = Some(c);
+            }
+        }
+        false
     }
 
     fn eat_line(&mut self) {
@@ -224,18 +172,15 @@ impl<'s> Scanner<'s> {
     }
 
     fn eat_whitespace(&mut self) {
-        while let Some(c) = self.peek() {
-            if c == ' ' || c == '\n' || c == '\t' || c == '\r' {
-                self.get().unwrap();
-            } else {
+        while let Some(c) = self.get() {
+            if !c.is_whitespace() {
+                self.peek = Some(c);
                 break;
             }
         }
     }
 
     fn eat_str(&mut self) -> ScanResult<String> {
-        assert_eq!(self.get().unwrap(), '"');
-
         let mut s = String::new();
 
         while let Some(c) = self.get() {
@@ -248,14 +193,14 @@ impl<'s> Scanner<'s> {
         Err(ScanError::UnclosedStr)
     }
 
-    fn eat_int(&mut self) -> ScanResult<i64> {
-        let mut s = String::new();
-        s.push(self.get().unwrap());
+    fn eat_int(&mut self, first: char) -> ScanResult<i64> {
+        let mut s = first.to_string();
 
-        while let Some(c) = self.peek() {
+        while let Some(c) = self.get() {
             if is_digit(c) {
-                s.push(self.get().unwrap())
+                s.push(c);
             } else {
+                self.peek = Some(c);
                 break;
             }
         }
@@ -263,14 +208,14 @@ impl<'s> Scanner<'s> {
         Ok(s.parse()?)
     }
 
-    fn eat_identifier_or_keyword(&mut self) -> ScanResult<Token> {
-        let mut s = String::new();
-        s.push(self.get().unwrap());
+    fn eat_identifier_or_keyword(&mut self, first: char) -> ScanResult<Token> {
+        let mut s = first.to_string();
 
-        while let Some(c) = self.peek() {
+        while let Some(c) = self.get() {
             if is_alpha_numeric_or_underscore(c) {
-                s.push(self.get().unwrap());
+                s.push(c);
             } else {
+                self.peek = Some(c);
                 break;
             }
         }

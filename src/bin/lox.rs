@@ -29,7 +29,7 @@ fn execute_file(filename: &str) {
 
     // Lex the tokens.
     let mut scanner = Scanner::new(&src);
-    let tokens = scanner.scan_all();
+    let tokens = scanner.scan();
 
     // Parse the list of statements.
     let mut parser = Parser::new(tokens);
@@ -69,7 +69,7 @@ fn repl() {
 }
 
 fn execute_line(interpreter: &mut Interpreter, line: &str) {
-    let mut parser = Parser::new(Scanner::new(line).scan_all());
+    let mut parser = Parser::new(Scanner::new(line).scan());
 
     let mut stmts = if let Ok(expr) = parser.expression() {
         vec![Stmt::Print(expr)]

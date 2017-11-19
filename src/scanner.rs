@@ -140,7 +140,7 @@ impl<'s> Scanner<'s> {
             } else if is_digit(c) {
                 Ok(Token::Int(self.eat_int(c)?))
             } else if is_alpha_or_underscore(c) {
-                self.eat_identifier_or_keyword(c)
+                Ok(self.eat_identifier_or_keyword(c))
             } else {
                 panic!("Unexpected character: {}", c);
             },
@@ -208,7 +208,7 @@ impl<'s> Scanner<'s> {
         Ok(s.parse()?)
     }
 
-    fn eat_identifier_or_keyword(&mut self, first: char) -> ScanResult<Token> {
+    fn eat_identifier_or_keyword(&mut self, first: char) -> Token {
         let mut s = first.to_string();
 
         while let Some(c) = self.get() {
@@ -221,26 +221,26 @@ impl<'s> Scanner<'s> {
         }
 
         match s.as_ref() {
-            "and" => return Ok(Token::And),
-            "class" => return Ok(Token::Class),
-            "else" => return Ok(Token::Else),
-            "false" => return Ok(Token::False),
-            "for" => return Ok(Token::For),
-            "fun" => return Ok(Token::Fun),
-            "if" => return Ok(Token::If),
-            "nil" => return Ok(Token::Nil),
-            "or" => return Ok(Token::Or),
-            "print" => return Ok(Token::Print),
-            "return" => return Ok(Token::Return),
-            "super" => return Ok(Token::Super),
-            "this" => return Ok(Token::This),
-            "true" => return Ok(Token::True),
-            "var" => return Ok(Token::Var),
-            "while" => return Ok(Token::While),
+            "and" => return Token::And,
+            "class" => return Token::Class,
+            "else" => return Token::Else,
+            "false" => return Token::False,
+            "for" => return Token::For,
+            "fun" => return Token::Fun,
+            "if" => return Token::If,
+            "nil" => return Token::Nil,
+            "or" => return Token::Or,
+            "print" => return Token::Print,
+            "return" => return Token::Return,
+            "super" => return Token::Super,
+            "this" => return Token::This,
+            "true" => return Token::True,
+            "var" => return Token::Var,
+            "while" => return Token::While,
             _ => {}
         }
 
-        Ok(Token::Identifier(s))
+        Token::Identifier(s)
     }
 }
 

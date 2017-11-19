@@ -76,7 +76,7 @@ impl fmt::Display for Token {
             Token::Identifier(ref s) | Token::Str(ref s) => write!(f, "{}", s),
             Token::Int(i) => write!(f, "{}", i),
 
-            Token::And => write!(f, "&&"),
+            Token::And => write!(f, "and"),
             Token::Class => write!(f, "class"),
             Token::Else => write!(f, "else"),
             Token::False => write!(f, "false"),
@@ -84,7 +84,7 @@ impl fmt::Display for Token {
             Token::For => write!(f, "for"),
             Token::If => write!(f, "if"),
             Token::Nil => write!(f, "nil"),
-            Token::Or => write!(f, "||"),
+            Token::Or => write!(f, "or"),
             Token::Print => write!(f, "print"),
             Token::Return => write!(f, "return"),
             Token::Super => write!(f, "super"),

@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::fmt;
 
 use primitive::Value;
@@ -5,13 +6,16 @@ use scanner::{Item, Token};
 
 const PARAM_LIMIT: usize = 8;
 
+trait OpToken {
+    fn token(&self) -> Token;
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum BinOp {
     Plus,
     Minus,
     Star,
     Slash,
-
     BangEqual,
     EqualEqual,
     Greater,
@@ -20,10 +24,36 @@ pub enum BinOp {
     LessEqual,
 }
 
+impl OpToken for BinOp {
+    fn token(&self) -> Token {
+        match *self {
+            BinOp::Plus => Token::Plus,
+            BinOp::Minus => Token::Minus,
+            BinOp::Star => Token::Star,
+            BinOp::Slash => Token::Slash,
+            BinOp::BangEqual => Token::BangEqual,
+            BinOp::EqualEqual => Token::EqualEqual,
+            BinOp::Greater => Token::Greater,
+            BinOp::GreaterEqual => Token::GreaterEqual,
+            BinOp::Less => Token::Less,
+            BinOp::LessEqual => Token::LessEqual,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum UnaryOp {
     Minus,
     Bang,
+}
+
+impl OpToken for UnaryOp {
+    fn token(&self) -> Token {
+        match *self {
+            UnaryOp::Minus => Token::Minus,
+            UnaryOp::Bang => Token::Bang,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -46,29 +76,17 @@ impl Var {
 
 #[derive(Clone, Debug)]
 pub enum Expr {
-    /// A binary expression, for example `1 + 2`.
     Binary(Box<ExprNode>, BinOp, Box<ExprNode>),
-    /// A logical expression, for example `foo && bar`.
     Logical(Box<ExprNode>, LogicOp, Box<ExprNode>),
-    /// A grouping expression, for example `(1)`.
     Grouping(Box<ExprNode>),
-    /// A literal expression, for example `1` or `"foo"`.
     Literal(Value),
-    /// A unary expression, for example `!true`.
     Unary(UnaryOp, Box<ExprNode>),
-    /// A variable expression, for example `name`.
     Var(Var),
-    /// An assignment expression, for example `a = 5`.
     VarAssign(Var, Box<ExprNode>),
-    /// A function call, for example `f(1, 2)`.
     Call(Box<ExprNode>, Vec<ExprNode>),
-    /// An anonymous function expression, for example `fun (a, b) { return a + b; }`.
     AnonymousFun(Function),
-    /// A get expression, for example `point.x`.
     Get(Box<ExprNode>, String),
-    /// A set expression, for example `point.x = 1`.
     Set(Box<ExprNode>, String, Box<ExprNode>),
-    /// A this expression within a method.
     This(Var),
 }
 
@@ -111,23 +129,14 @@ pub struct Class {
 
 #[derive(Clone, Debug)]
 pub enum Stmt {
-    /// An expression statement.
     Expr(ExprNode),
-    /// A print statement.
     Print(ExprNode),
-    /// A variable declaration.
     VarDecl(String, Option<ExprNode>),
-    /// A function declaration.
     Fun(Function),
-    /// A class declaration.
     Class(Class),
-    /// A return statement.
     Return(Option<ExprNode>),
-    /// A block statement.
     Block(Vec<Stmt>),
-    /// An if statement.
     If(ExprNode, Box<Stmt>, Option<Box<Stmt>>),
-    /// A while statement.
     While(ExprNode, Box<Stmt>),
 }
 
@@ -210,32 +219,7 @@ impl Parser {
         }
     }
 
-    fn next_is(&mut self, token: &Token) -> Option<&Item> {
-        if self.check(token) {
-            Some(self.advance())
-        } else {
-            None
-        }
-    }
-
-    fn next_is_clone(&mut self, token: &Token) -> Option<Item> {
-        self.next_is(token).cloned()
-    }
-
-    fn next_is_any(&mut self, tokens: Vec<Token>) -> Option<&Item> {
-        for token in tokens {
-            if self.check(&token) {
-                return Some(self.advance());
-            }
-        }
-        None
-    }
-
-    fn next_is_any_clone(&mut self, tokens: Vec<Token>) -> Option<Item> {
-        self.next_is_any(tokens).cloned()
-    }
-
-    fn advance_if(&mut self, token: &Token) -> bool {
+    fn match_token<T: Borrow<Token>>(&mut self, token: T) -> bool {
         if self.check(token) {
             self.advance();
             true
@@ -244,12 +228,31 @@ impl Parser {
         }
     }
 
-    fn check(&mut self, token: &Token) -> bool {
+    fn match_token_line<T: Borrow<Token>>(&mut self, token: T) -> Option<usize> {
+        if self.check(token) {
+            let line = self.advance().line();
+            Some(line)
+        } else {
+            None
+        }
+    }
+
+    fn match_op<T: OpToken>(&mut self, ops: Vec<T>) -> Option<(T, usize)> {
+        for op in ops {
+            if self.check(&op.token()) {
+                let item = self.advance();
+                return Some((op, item.line()));
+            }
+        }
+        None
+    }
+
+    fn check<T: Borrow<Token>>(&mut self, token: T) -> bool {
         if self.is_at_end() {
             return false;
         }
 
-        self.peek().token() == token
+        self.peek().token() == token.borrow()
     }
 
     fn advance(&mut self) -> &Item {
@@ -271,8 +274,8 @@ impl Parser {
         &self.tokens[self.pos - 1]
     }
 
-    fn consume(&mut self, token: &Token, message: &str) -> ParseResult<&Item> {
-        if self.advance_if(token) {
+    fn consume(&mut self, token: Token, message: &str) -> ParseResult<&Item> {
+        if self.match_token(token) {
             return Ok(self.previous());
         }
 
@@ -324,11 +327,11 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> ParseResult<Stmt> {
-        let result = if self.advance_if(&Token::Var) {
+        let result = if self.match_token(Token::Var) {
             self.var_declaration()
-        } else if self.advance_if(&Token::Fun) {
+        } else if self.match_token(Token::Fun) {
             self.fun_declaration("function").map(Stmt::Fun)
-        } else if self.advance_if(&Token::Class) {
+        } else if self.match_token(Token::Class) {
             self.class_declaration().map(Stmt::Class)
         } else {
             self.statement()
@@ -344,13 +347,13 @@ impl Parser {
     fn var_declaration(&mut self) -> ParseResult<Stmt> {
         let name = self.consume_identifier("Expect variable name.")?;
 
-        let initializer = if self.advance_if(&Token::Equal) {
+        let initializer = if self.match_token(Token::Equal) {
             Some(self.expression()?)
         } else {
             None
         };
 
-        self.consume(&Token::Semicolon, "Expect ';' after variable declaration.")?;
+        self.consume(Token::Semicolon, "Expect ';' after variable declaration.")?;
 
         Ok(Stmt::VarDecl(name, initializer))
     }
@@ -358,7 +361,7 @@ impl Parser {
     fn fun_declaration(&mut self, kind: &str) -> ParseResult<Function> {
         let name = self.consume_identifier(&format!("Expect {} name.", kind))?;
         self.consume(
-            &Token::LeftParen,
+            Token::LeftParen,
             &format!("Expect '(' after {} name.", kind),
         )?;
         let (parameters, body) = self.fun_parameters_and_body()?;
@@ -370,7 +373,7 @@ impl Parser {
     }
 
     fn fun_expression(&mut self) -> ParseResult<Function> {
-        self.consume(&Token::LeftParen, "Expect '(' after fun keyword.")?;
+        self.consume(Token::LeftParen, "Expect '(' after fun keyword.")?;
         let (parameters, body) = self.fun_parameters_and_body()?;
         Ok(Function {
             name: "anonymous".into(),
@@ -392,14 +395,14 @@ impl Parser {
 
                 let identifier = self.consume_identifier("Expect parameter name.")?;
                 parameters.push(identifier);
-                if !self.advance_if(&Token::Comma) {
+                if !self.match_token(Token::Comma) {
                     break;
                 }
             }
         }
 
-        self.consume(&Token::RightParen, "Expect ')' after parameters.")?;
-        self.consume(&Token::LeftBrace, "Expect '{' before function body.")?;
+        self.consume(Token::RightParen, "Expect ')' after parameters.")?;
+        self.consume(Token::LeftBrace, "Expect '{' before function body.")?;
 
         let body = self.block_statement()?;
 
@@ -408,29 +411,29 @@ impl Parser {
 
     fn class_declaration(&mut self) -> ParseResult<Class> {
         let name = self.consume_identifier("Expect class name.")?;
-        self.consume(&Token::LeftBrace, "Expect '{' after class name.")?;
+        self.consume(Token::LeftBrace, "Expect '{' after class name.")?;
 
         let mut methods = Vec::new();
-        while !self.check(&Token::RightBrace) && !self.is_at_end() {
+        while !self.check(Token::RightBrace) && !self.is_at_end() {
             methods.push(self.fun_declaration("method")?);
         }
 
-        self.consume(&Token::RightBrace, "Expect '}' after class declaration.")?;
+        self.consume(Token::RightBrace, "Expect '}' after class declaration.")?;
         Ok(Class { name, methods })
     }
 
     fn statement(&mut self) -> ParseResult<Stmt> {
-        if self.advance_if(&Token::Print) {
+        if self.match_token(Token::Print) {
             self.print_statement()
-        } else if self.advance_if(&Token::LeftBrace) {
+        } else if self.match_token(Token::LeftBrace) {
             Ok(Stmt::Block(self.block_statement()?))
-        } else if self.advance_if(&Token::If) {
+        } else if self.match_token(Token::If) {
             self.if_statement()
-        } else if self.advance_if(&Token::While) {
+        } else if self.match_token(Token::While) {
             self.while_statement()
-        } else if self.advance_if(&Token::For) {
+        } else if self.match_token(Token::For) {
             self.for_statement()
-        } else if self.advance_if(&Token::Return) {
+        } else if self.match_token(Token::Return) {
             self.return_statement()
         } else {
             self.expression_statement()
@@ -439,29 +442,29 @@ impl Parser {
 
     fn print_statement(&mut self) -> ParseResult<Stmt> {
         let expr = self.expression()?;
-        self.consume(&Token::Semicolon, "Expect ';' after print statement.")?;
+        self.consume(Token::Semicolon, "Expect ';' after print statement.")?;
         Ok(Stmt::Print(expr))
     }
 
     fn block_statement(&mut self) -> ParseResult<Vec<Stmt>> {
         let mut stmts = Vec::new();
 
-        while !self.check(&Token::RightBrace) && !self.is_at_end() {
+        while !self.check(Token::RightBrace) && !self.is_at_end() {
             stmts.push(self.declaration()?);
         }
 
-        self.consume(&Token::RightBrace, "Expect '}' after block.")?;
+        self.consume(Token::RightBrace, "Expect '}' after block.")?;
         Ok(stmts)
     }
 
     fn if_statement(&mut self) -> ParseResult<Stmt> {
-        self.consume(&Token::LeftParen, "Expect '(' after if.")?;
+        self.consume(Token::LeftParen, "Expect '(' after if.")?;
         let condition = self.expression()?;
-        self.consume(&Token::RightParen, "Expect ')' after if condition.")?;
+        self.consume(Token::RightParen, "Expect ')' after if condition.")?;
         let then_branch = Box::new(self.statement()?);
 
         // Check for the optional else.
-        let else_branch = if self.advance_if(&Token::Else) {
+        let else_branch = if self.match_token(Token::Else) {
             Some(Box::new(self.statement()?))
         } else {
             None
@@ -471,30 +474,30 @@ impl Parser {
     }
 
     fn while_statement(&mut self) -> ParseResult<Stmt> {
-        self.consume(&Token::LeftParen, "Expect '(' after while.")?;
+        self.consume(Token::LeftParen, "Expect '(' after while.")?;
         let condition = self.expression()?;
-        self.consume(&Token::RightParen, "Expect ')' after while condition.")?;
+        self.consume(Token::RightParen, "Expect ')' after while condition.")?;
         let body = self.statement()?;
         Ok(Stmt::While(condition, Box::new(body)))
     }
 
     fn for_statement(&mut self) -> ParseResult<Stmt> {
-        self.consume(&Token::LeftParen, "Expect '(' after for.")?;
+        self.consume(Token::LeftParen, "Expect '(' after for.")?;
 
-        let initializer = if self.advance_if(&Token::Var) {
+        let initializer = if self.match_token(Token::Var) {
             Some(self.var_declaration()?)
-        } else if self.advance_if(&Token::Semicolon) {
+        } else if self.match_token(Token::Semicolon) {
             None
         } else {
             // It has to be an expression statement.
             Some(self.expression_statement()?)
         };
 
-        let condition = if let Some(item) = self.next_is_clone(&Token::Semicolon) {
-            ExprNode::new(Expr::Literal(Value::Bool(true)), item.line())
+        let condition = if let Some(line) = self.match_token_line(Token::Semicolon) {
+            ExprNode::new(Expr::Literal(Value::Bool(true)), line)
         } else {
             let condition = self.expression()?;
-            self.consume(&Token::Semicolon, "Expect ';' after for condition.")?;
+            self.consume(Token::Semicolon, "Expect ';' after for condition.")?;
             condition
         };
 
@@ -504,7 +507,7 @@ impl Parser {
             Some(self.expression()?)
         };
 
-        self.consume(&Token::RightParen, "Expect ')' after for.")?;
+        self.consume(Token::RightParen, "Expect ')' after for.")?;
 
         let mut body = self.statement()?;
 
@@ -522,20 +525,20 @@ impl Parser {
     }
 
     fn return_statement(&mut self) -> ParseResult<Stmt> {
-        let expr = if *self.peek().token() != Token::Semicolon {
+        let expr = if !self.check(Token::Semicolon) {
             Some(self.expression()?)
         } else {
             None
         };
 
-        self.consume(&Token::Semicolon, "Expect ';' after return statement.")?;
+        self.consume(Token::Semicolon, "Expect ';' after return statement.")?;
 
         Ok(Stmt::Return(expr))
     }
 
     fn expression_statement(&mut self) -> ParseResult<Stmt> {
         let expr = self.expression()?;
-        self.consume(&Token::Semicolon, "Expect ';' after expression.")?;
+        self.consume(Token::Semicolon, "Expect ';' after expression.")?;
         Ok(Stmt::Expr(expr))
     }
 
@@ -546,7 +549,7 @@ impl Parser {
     fn assignment(&mut self) -> ParseResult<ExprNode> {
         let node = self.or()?;
 
-        if self.advance_if(&Token::Equal) {
+        if self.match_token(Token::Equal) {
             let equals = self.previous().clone();
             let value = self.assignment()?;
 
@@ -572,11 +575,11 @@ impl Parser {
     fn or(&mut self) -> ParseResult<ExprNode> {
         let mut node = self.and()?;
 
-        while let Some(item) = self.next_is_clone(&Token::Or) {
+        while let Some(line) = self.match_token_line(Token::Or) {
             let right = self.and()?;
             node = ExprNode::new(
                 Expr::Logical(Box::new(node), LogicOp::Or, Box::new(right)),
-                item.line(),
+                line,
             );
         }
 
@@ -586,11 +589,11 @@ impl Parser {
     fn and(&mut self) -> ParseResult<ExprNode> {
         let mut node = self.equality()?;
 
-        while let Some(item) = self.next_is_clone(&Token::And) {
+        while let Some(line) = self.match_token_line(Token::And) {
             let right = self.equality()?;
             node = ExprNode::new(
                 Expr::Logical(Box::new(node), LogicOp::And, Box::new(right)),
-                item.line(),
+                line,
             );
         }
 
@@ -600,17 +603,9 @@ impl Parser {
     fn equality(&mut self) -> ParseResult<ExprNode> {
         let mut node = self.comparison()?;
 
-        while let Some(item) = self.next_is_any_clone(vec![Token::BangEqual, Token::EqualEqual]) {
-            let op = match *item.token() {
-                Token::BangEqual => BinOp::BangEqual,
-                Token::EqualEqual => BinOp::EqualEqual,
-                ref token => panic!("unexpected token: {:?}", token),
-            };
+        while let Some((op, line)) = self.match_op(vec![BinOp::BangEqual, BinOp::EqualEqual]) {
             let right = self.comparison()?;
-            node = ExprNode::new(
-                Expr::Binary(Box::new(node), op, Box::new(right)),
-                item.line(),
-            );
+            node = ExprNode::new(Expr::Binary(Box::new(node), op, Box::new(right)), line);
         }
 
         Ok(node)
@@ -619,24 +614,14 @@ impl Parser {
     fn comparison(&mut self) -> ParseResult<ExprNode> {
         let mut node = self.addition()?;
 
-        while let Some(item) = self.next_is_any_clone(vec![
-            Token::Greater,
-            Token::GreaterEqual,
-            Token::Less,
-            Token::LessEqual,
+        while let Some((op, line)) = self.match_op(vec![
+            BinOp::Greater,
+            BinOp::GreaterEqual,
+            BinOp::Less,
+            BinOp::LessEqual,
         ]) {
-            let op = match *item.token() {
-                Token::Greater => BinOp::Greater,
-                Token::GreaterEqual => BinOp::GreaterEqual,
-                Token::Less => BinOp::Less,
-                Token::LessEqual => BinOp::LessEqual,
-                ref token => panic!("unexpected token: {:?}", token),
-            };
             let right = self.addition()?;
-            node = ExprNode::new(
-                Expr::Binary(Box::new(node), op, Box::new(right)),
-                item.line(),
-            );
+            node = ExprNode::new(Expr::Binary(Box::new(node), op, Box::new(right)), line);
         }
 
         Ok(node)
@@ -645,17 +630,9 @@ impl Parser {
     fn addition(&mut self) -> ParseResult<ExprNode> {
         let mut node = self.multiplication()?;
 
-        while let Some(item) = self.next_is_any_clone(vec![Token::Minus, Token::Plus]) {
-            let op = match *item.token() {
-                Token::Minus => BinOp::Minus,
-                Token::Plus => BinOp::Plus,
-                ref token => panic!("unexpected token: {:?}", token),
-            };
+        while let Some((op, line)) = self.match_op(vec![BinOp::Minus, BinOp::Plus]) {
             let right = self.multiplication()?;
-            node = ExprNode::new(
-                Expr::Binary(Box::new(node), op, Box::new(right)),
-                item.line(),
-            );
+            node = ExprNode::new(Expr::Binary(Box::new(node), op, Box::new(right)), line);
         }
 
         Ok(node)
@@ -664,31 +641,18 @@ impl Parser {
     fn multiplication(&mut self) -> ParseResult<ExprNode> {
         let mut node = self.unary()?;
 
-        while let Some(item) = self.next_is_any_clone(vec![Token::Slash, Token::Star]) {
-            let op = match *item.token() {
-                Token::Slash => BinOp::Slash,
-                Token::Star => BinOp::Star,
-                ref token => panic!("unexpected token: {:?}", token),
-            };
+        while let Some((op, line)) = self.match_op(vec![BinOp::Slash, BinOp::Star]) {
             let right = self.unary()?;
-            node = ExprNode::new(
-                Expr::Binary(Box::new(node), op, Box::new(right)),
-                item.line(),
-            );
+            node = ExprNode::new(Expr::Binary(Box::new(node), op, Box::new(right)), line);
         }
 
         Ok(node)
     }
 
     fn unary(&mut self) -> ParseResult<ExprNode> {
-        if let Some(item) = self.next_is_any_clone(vec![Token::Minus, Token::Bang]) {
-            let op = match *item.token() {
-                Token::Minus => UnaryOp::Minus,
-                Token::Bang => UnaryOp::Bang,
-                ref token => panic!("unexpected token: {:?}", token),
-            };
+        if let Some((op, line)) = self.match_op(vec![UnaryOp::Minus, UnaryOp::Bang]) {
             let right = self.unary()?;
-            Ok(ExprNode::new(Expr::Unary(op, Box::new(right)), item.line()))
+            Ok(ExprNode::new(Expr::Unary(op, Box::new(right)), line))
         } else {
             self.call()
         }
@@ -698,11 +662,11 @@ impl Parser {
         let mut node = self.primary()?;
 
         loop {
-            if self.advance_if(&Token::LeftParen) {
+            if self.match_token(Token::LeftParen) {
                 node = self.finish_call(node)?;
-            } else if let Some(item) = self.next_is_clone(&Token::Dot) {
+            } else if let Some(line) = self.match_token_line(Token::Dot) {
                 let name = self.consume_identifier("Expect property name after '.'.")?;
-                node = ExprNode::new(Expr::Get(Box::new(node), name), item.line());
+                node = ExprNode::new(Expr::Get(Box::new(node), name), line);
             } else {
                 break;
             }
@@ -714,7 +678,7 @@ impl Parser {
     fn finish_call(&mut self, callee: ExprNode) -> ParseResult<ExprNode> {
         let mut arguments = Vec::new();
 
-        if *self.peek().token() != Token::RightParen {
+        if !self.check(Token::RightParen) {
             loop {
                 if arguments.len() >= PARAM_LIMIT {
                     return Err(ParseError::TooManyParams(
@@ -723,13 +687,13 @@ impl Parser {
                     ));
                 }
                 arguments.push(self.expression()?);
-                if !self.advance_if(&Token::Comma) {
+                if !self.match_token(Token::Comma) {
                     break;
                 }
             }
         }
 
-        let paren = self.consume(&Token::RightParen, "Expect ')' after function arguments.")?;
+        let paren = self.consume(Token::RightParen, "Expect ')' after function arguments.")?;
         Ok(ExprNode::new(
             Expr::Call(Box::new(callee), arguments),
             paren.line(),
@@ -737,61 +701,40 @@ impl Parser {
     }
 
     fn primary(&mut self) -> ParseResult<ExprNode> {
-        if let Some(item) = self.next_is(&Token::False) {
-            return Ok(ExprNode::new(
-                Expr::Literal(Value::Bool(false)),
-                item.line(),
-            ));
-        }
-        if let Some(item) = self.next_is(&Token::True) {
-            return Ok(ExprNode::new(Expr::Literal(Value::Bool(true)), item.line()));
-        }
-        if let Some(item) = self.next_is(&Token::Nil) {
-            return Ok(ExprNode::new(Expr::Literal(Value::Nil), item.line()));
-        }
-        if let Some(item) = self.next_is_clone(&Token::Fun) {
-            match self.fun_expression() {
-                Ok(f) => return Ok(ExprNode::new(Expr::AnonymousFun(f), item.line())),
-                Err(_) => {
-                    // Revert position so that we display the same errors as
-                    // the reference Lox implementation.
-                    self.pos -= 1;
+        let next = self.advance().clone();
+        let line = next.line();
+
+        let expr = match *next.token() {
+            Token::False => Expr::Literal(Value::Bool(false)),
+            Token::True => Expr::Literal(Value::Bool(true)),
+            Token::Nil => Expr::Literal(Value::Nil),
+            Token::This => Expr::This(Var::new("this".into())),
+            Token::Int(i) => Expr::Literal(Value::Int(i)),
+            Token::Str(ref s) => Expr::Literal(Value::Str(s.clone())),
+            Token::Identifier(ref name) => Expr::Var(Var::new(name.clone())),
+            Token::LeftParen => {
+                let expr = self.expression()?;
+                self.consume(Token::RightParen, "Expect ')' after expression.")?;
+                Expr::Grouping(Box::new(expr))
+            }
+            Token::Fun => {
+                match self.fun_expression() {
+                    Ok(f) => Expr::AnonymousFun(f),
+                    Err(_) => {
+                        // Revert position so that we display the same errors as
+                        // the reference Lox implementation which does not have
+                        // anonymous functions.
+                        self.pos -= 1;
+                        return Err(ParseError::MissingExpr(next.clone()));
+                    }
                 }
             }
-        }
-        if let Some(item) = self.next_is(&Token::This) {
-            return Ok(ExprNode::new(
-                Expr::This(Var::new("this".into())),
-                item.line(),
-            ));
-        }
-        if let Some(item) = self.next_is_clone(&Token::LeftParen) {
-            let expr = self.expression()?;
-            self.consume(&Token::RightParen, "Expect ')' after expression.")?;
-            return Ok(ExprNode::new(Expr::Grouping(Box::new(expr)), item.line()));
-        }
+            _ => {
+                self.pos -= 1;
+                return Err(ParseError::MissingExpr(next.clone()));
+            }
+        };
 
-        let next = self.peek().clone();
-        match *next.token() {
-            Token::Int(i) => {
-                self.advance();
-                Ok(ExprNode::new(Expr::Literal(Value::Int(i)), next.line()))
-            }
-            Token::Str(ref s) => {
-                self.advance();
-                Ok(ExprNode::new(
-                    Expr::Literal(Value::Str(s.clone())),
-                    next.line(),
-                ))
-            }
-            Token::Identifier(ref name) => {
-                self.advance();
-                Ok(ExprNode::new(
-                    Expr::Var(Var::new(name.clone())),
-                    next.line(),
-                ))
-            }
-            _ => Err(ParseError::MissingExpr(next.clone())),
-        }
+        Ok(ExprNode::new(expr, line))
     }
 }

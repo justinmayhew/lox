@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use parser::{Expr, Stmt};
+use parser::{self, Expr, ExprNode, Stmt};
 
 pub fn resolve(stmts: &mut [Stmt]) {
     let mut resolver = Resolver::default();
@@ -148,8 +148,8 @@ impl Resolver {
         }
     }
 
-    fn resolve_expr(&mut self, expr: &mut Expr) {
-        match *expr {
+    fn resolve_expr(&mut self, node: &mut ExprNode) {
+        match *node.expr_mut() {
             Expr::Binary(ref mut left, _op, ref mut right) => {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
@@ -161,19 +161,19 @@ impl Resolver {
             Expr::Grouping(ref mut expr) => self.resolve_expr(expr),
             Expr::Literal(ref _value) => {}
             Expr::Unary(_op, ref mut expr) => self.resolve_expr(expr),
-            Expr::Var(ref name, ref mut hops) => {
+            Expr::Var(ref mut var) => {
                 if let Some(map) = self.scopes.last() {
-                    if let Some(var) = map.get(name) {
-                        if !var.is_initialized() {
+                    if let Some(v) = map.get(&var.name) {
+                        if !v.is_initialized() {
                             panic!("Cannot read local variable in its own initializer.");
                         }
                     }
                 }
-                self.resolve_local(name, hops);
+                self.resolve_local(var);
             }
-            Expr::VarAssign(ref name, ref mut expr, ref mut hops) => {
+            Expr::VarAssign(ref mut var, ref mut expr) => {
                 self.resolve_expr(expr);
-                self.resolve_local(name, hops);
+                self.resolve_local(var);
             }
             Expr::Call(ref mut callee, ref mut args) => {
                 self.resolve_expr(callee);
@@ -191,11 +191,11 @@ impl Resolver {
                 self.resolve_expr(value);
                 self.resolve_expr(object);
             }
-            Expr::This(ref mut hops) => {
+            Expr::This(ref mut var) => {
                 if let ClassKind::None = self.current_class {
                     panic!("Cannot use 'this' outside of a class.");
                 }
-                self.resolve_local("this", hops);
+                self.resolve_local(var);
             }
         }
     }
@@ -226,7 +226,7 @@ impl Resolver {
             let scope = self.scopes.last_mut().unwrap();
             for (key, var) in scope.iter() {
                 if !var.is_used() && key != "this" {
-                    eprintln!("Unused variable: {}", key);
+                    warn!("Unused variable: {}", key);
                 }
             }
         }
@@ -255,13 +255,13 @@ impl Resolver {
         scope.insert(name, Var::initialized());
     }
 
-    fn resolve_local(&mut self, name: &str, hops: &mut Option<usize>) {
+    fn resolve_local(&mut self, var: &mut parser::Var) {
         let len = self.scopes.len();
 
         for i in (0..len).rev() {
-            if let Some(ref mut var) = self.scopes[i].get_mut(name) {
-                var.increment_usages();
-                *hops = Some(len - 1 - i);
+            if let Some(ref mut v) = self.scopes[i].get_mut(&var.name) {
+                v.increment_usages();
+                var.hops = Some(len - 1 - i);
                 return;
             }
         }

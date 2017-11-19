@@ -4,6 +4,7 @@ extern crate rustyline;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::process;
 
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
@@ -33,13 +34,22 @@ fn execute_file(filename: &str) {
 
     // Parse the list of statements.
     let mut parser = Parser::new(tokens);
-    let mut stmts = parser.parse().expect("error parsing file");
+    let mut stmts = match parser.parse() {
+        Ok(stmts) => stmts,
+        Err(errs) => {
+            for err in errs {
+                eprintln!("[line {}] {}", err.line(), err);
+            }
+            process::exit(65)
+        }
+    };
 
     resolve(&mut stmts);
 
-    Interpreter::default()
-        .execute(&stmts)
-        .expect("error executing program");
+    if let Err(err) = Interpreter::default().execute(&stmts) {
+        eprintln!("{}\n[line {}]", err, err.line());
+        process::exit(65);
+    }
 }
 
 fn repl() {
@@ -76,8 +86,10 @@ fn execute_line(interpreter: &mut Interpreter, line: &str) {
     } else {
         match parser.reset().parse() {
             Ok(stmts) => stmts,
-            Err(err) => {
-                eprintln!("Parse error: {}", err);
+            Err(errs) => {
+                for err in errs {
+                    eprintln!("[line {}] {}", err.line(), err);
+                }
                 return;
             }
         }

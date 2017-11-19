@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use class::LoxClass;
-use primitive::{Error, Value, ValueResult};
+use primitive::Value;
 
 #[derive(Debug)]
 struct Instance {
@@ -40,19 +40,15 @@ impl LoxInstance {
         }
     }
 
-    pub fn get(&self, name: &str) -> ValueResult {
+    pub fn get(&self, name: &str) -> Option<Value> {
         let instance = self.inner.borrow();
 
         if let Some(value) = instance.get_field(name) {
-            Ok(value)
+            Some(value)
         } else if let Some(method) = instance.class.get_method(name, self.clone()) {
-            Ok(Value::Fun(method))
+            Some(Value::Fun(method))
         } else {
-            Err(Error::RuntimeError(format!(
-                "Undefined property {} on {} instance",
-                name,
-                instance.class.name()
-            )))
+            None
         }
     }
 

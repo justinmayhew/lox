@@ -5,6 +5,7 @@ use std::result;
 use callable::LoxCallable;
 use class::LoxClass;
 use instance::LoxInstance;
+use parser::Var;
 
 #[derive(Clone)]
 pub enum Value {
@@ -20,24 +21,29 @@ pub enum Value {
 #[derive(Debug)]
 pub enum Error {
     Return(Value),
-    RuntimeError(String),
+    RuntimeError { message: String, line: usize },
     TypeError(String),
     DivideByZero,
-    UndefinedVar(String),
-    ArityError(String),
+    UndefinedVar { var: Var, line: usize },
+}
+
+impl Error {
+    pub fn line(&self) -> usize {
+        match *self {
+            Error::Return(_) | Error::TypeError(_) | Error::DivideByZero => 0,
+            Error::RuntimeError { line, .. } | Error::UndefinedVar { line, .. } => line,
+        }
+    }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::Return(ref value) => write!(f, "Return {}", value),
-            Error::RuntimeError(ref msg) => write!(f, "RuntimeError {}", msg),
+            Error::RuntimeError { ref message, .. } => write!(f, "{}", message),
             Error::TypeError(ref msg) => write!(f, "TypeError {}", msg),
             Error::DivideByZero => write!(f, "DivideByZero: division by zero"),
-            Error::UndefinedVar(ref name) => {
-                write!(f, "UndefinedVar: name '{}' is not defined", name)
-            }
-            Error::ArityError(ref msg) => write!(f, "ArityError: {}", msg),
+            Error::UndefinedVar { ref var, .. } => write!(f, "Undefined variable '{}'.", var.name),
         }
     }
 }
@@ -46,11 +52,11 @@ pub type Result<T> = result::Result<T, Error>;
 pub type ValueResult = Result<Value>;
 
 impl Value {
-    pub fn unwrap_callable(&self) -> Rc<LoxCallable> {
+    pub fn to_callable(&self) -> Option<Rc<LoxCallable>> {
         match *self {
-            Value::Fun(ref f) => Rc::clone(f),
-            Value::Class(ref c) => Rc::new(c.clone()),
-            ref value => panic!("{:?} is not callable", value),
+            Value::Fun(ref f) => Some(Rc::clone(f)),
+            Value::Class(ref c) => Some(Rc::new(c.clone())),
+            _ => None,
         }
     }
 }

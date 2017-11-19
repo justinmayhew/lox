@@ -4,12 +4,11 @@ use std::fmt;
 use std::mem;
 use std::ops;
 use std::rc::Rc;
-use std::usize;
 
 use callable::{Clock, LoxFunction};
 use class::LoxClass;
 use environment::Environment;
-use parser::{BinOp, Expr, LogicOp, Stmt, UnaryOp};
+use parser::{BinOp, Expr, ExprNode, LogicOp, Stmt, UnaryOp, Var};
 use primitive::{Error, Result, Value, ValueResult};
 
 pub struct Interpreter {
@@ -105,8 +104,8 @@ impl Interpreter {
         }
     }
 
-    fn evaluate(&mut self, expr: &Expr) -> ValueResult {
-        match *expr {
+    fn evaluate(&mut self, node: &ExprNode) -> ValueResult {
+        match *node.expr() {
             Expr::Binary(ref left_expr, op, ref right_expr) => {
                 let left = self.evaluate(left_expr)?;
                 let right = self.evaluate(right_expr)?;
@@ -162,23 +161,33 @@ impl Interpreter {
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
                 }
             }
-            Expr::Var(ref name, hops) => self.look_up_variable(name, hops),
-            Expr::VarAssign(ref name, ref expr, hops) => {
+            Expr::Var(ref var) | Expr::This(ref var) => match self.look_up_variable(var) {
+                Some(value) => Ok(value),
+                None => Err(Error::UndefinedVar {
+                    var: var.clone(),
+                    line: node.line(),
+                }),
+            },
+            Expr::VarAssign(ref var, ref expr) => {
                 let value = self.evaluate(expr)?;
 
-                match hops {
+                match var.hops {
                     Some(hops) => {
-                        self.env.assign_at(name, value.clone(), hops);
+                        self.env.assign_at(&var.name, value.clone(), hops);
                         Ok(value)
                     }
-                    None => if self.globals.assign(name, value.clone()) {
+                    None => if self.globals.assign(&var.name, value.clone()) {
                         Ok(value)
                     } else {
-                        Err(Error::UndefinedVar(name.clone()))
+                        Err(Error::UndefinedVar {
+                            var: var.clone(),
+                            line: node.line(),
+                        })
                     },
                 }
             }
             Expr::Call(ref callee, ref argument_exprs) => {
+                let line = callee.line();
                 let callee = self.evaluate(callee)?;
 
                 let mut arguments = Vec::with_capacity(argument_exprs.len());
@@ -186,16 +195,27 @@ impl Interpreter {
                     arguments.push(self.evaluate(expr)?);
                 }
 
-                let f = callee.unwrap_callable();
+                let f = match callee.to_callable() {
+                    Some(f) => f,
+                    None => {
+                        return Err(Error::RuntimeError {
+                            message: "Can only call functions and classes.".into(),
+                            line,
+                        })
+                    }
+                };
 
                 if arguments.len() == f.arity() {
                     f.call(self, arguments)
                 } else {
-                    Err(Error::ArityError(format!(
-                        "fun takes {} arguments but got {}",
-                        f.arity(),
-                        arguments.len(),
-                    )))
+                    Err(Error::RuntimeError {
+                        message: format!(
+                            "Expected {} arguments but got {}.",
+                            f.arity(),
+                            arguments.len()
+                        ),
+                        line,
+                    })
                 }
             }
             Expr::AnonymousFun(ref fun) => {
@@ -205,11 +225,17 @@ impl Interpreter {
             Expr::Get(ref expr, ref name) => {
                 let object = self.evaluate(expr)?;
                 if let Value::Instance(instance) = object {
-                    instance.get(name)
+                    instance.get(name).ok_or_else(|| {
+                        Error::RuntimeError {
+                            message: format!("Undefined property '{}'.", name),
+                            line: expr.line(),
+                        }
+                    })
                 } else {
-                    Err(Error::TypeError(
-                        format!("Unable to get {} property on {}", name, object),
-                    ))
+                    Err(Error::RuntimeError {
+                        message: "Only instances have properties.".into(),
+                        line: expr.line(),
+                    })
                 }
             }
             Expr::Set(ref left, ref name, ref right) => {
@@ -219,12 +245,12 @@ impl Interpreter {
                     instance.set(name.clone(), value.clone());
                     Ok(value)
                 } else {
-                    Err(Error::TypeError(
-                        format!("Unable to set {} property on {}", name, object),
-                    ))
+                    Err(Error::RuntimeError {
+                        message: "Only instances have fields.".into(),
+                        line: left.line(),
+                    })
                 }
             }
-            Expr::This(hops) => self.look_up_variable("this", hops),
         }
     }
 
@@ -244,12 +270,12 @@ impl Interpreter {
         result
     }
 
-    fn look_up_variable(&self, name: &str, hops: Option<usize>) -> ValueResult {
-        match hops {
-            Some(hops) => Ok(self.env.get_at(name, hops)),
-            None => match self.globals.get(name) {
-                Some(value) => Ok(value),
-                None => Err(Error::UndefinedVar(name.into())),
+    fn look_up_variable(&self, var: &Var) -> Option<Value> {
+        match var.hops {
+            Some(hops) => Some(self.env.get_at(&var.name, hops)),
+            None => match self.globals.get(&var.name) {
+                Some(value) => Some(value),
+                None => None,
             },
         }
     }
@@ -257,11 +283,11 @@ impl Interpreter {
 
 fn is_truthy(value: &Value) -> bool {
     match *value {
-        Value::Str(ref s) => !s.is_empty(),
-        Value::Int(n) => n != 0,
+        Value::Fun(_) | Value::Class(_) | Value::Instance(_) | Value::Str(_) | Value::Int(_) => {
+            true
+        }
         Value::Bool(b) => b,
         Value::Nil => false,
-        Value::Fun(..) | Value::Class(..) | Value::Instance(..) => true,
     }
 }
 
@@ -317,11 +343,11 @@ impl ops::Div for Value {
 
 fn eq(left: Value, right: Value) -> Result<bool> {
     match (left, right) {
+        (Value::Nil, Value::Nil) => Ok(true),
+        (Value::Bool(a), Value::Bool(b)) => Ok(a == b),
         (Value::Int(left), Value::Int(right)) => Ok(left == right),
         (Value::Str(ref left), Value::Str(ref right)) => Ok(left == right),
-        (left, right) => Err(Error::TypeError(
-            format!("Cannot compare {:?} to {:?}", left, right),
-        )),
+        (_, _) => Ok(false),
     }
 }
 
@@ -342,7 +368,7 @@ impl fmt::Display for Value {
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
-            Value::Fun(ref func) => write!(f, "<fun {}>", func.name()),
+            Value::Fun(ref func) => write!(f, "<fn {}>", func.name()),
             Value::Class(ref class) => write!(f, "<class {}>", class.name()),
             Value::Instance(ref instance) => write!(f, "<{} instance>", instance.class_name()),
         }

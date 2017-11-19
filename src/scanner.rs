@@ -1,3 +1,4 @@
+use std::fmt;
 use std::num::ParseIntError;
 use std::str::Chars;
 
@@ -48,6 +49,71 @@ pub enum Token {
     Eof,
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Token::LeftParen => write!(f, "("),
+            Token::RightParen => write!(f, ")"),
+            Token::LeftBrace => write!(f, "{{"),
+            Token::RightBrace => write!(f, "}}"),
+            Token::Comma => write!(f, ","),
+            Token::Dot => write!(f, "."),
+            Token::Minus => write!(f, "-"),
+            Token::Plus => write!(f, "+"),
+            Token::Semicolon => write!(f, ";"),
+            Token::Slash => write!(f, "/"),
+            Token::Star => write!(f, "*"),
+
+            Token::Bang => write!(f, "!"),
+            Token::BangEqual => write!(f, "!="),
+            Token::Equal => write!(f, "="),
+            Token::EqualEqual => write!(f, "=="),
+            Token::Greater => write!(f, ">"),
+            Token::GreaterEqual => write!(f, ">="),
+            Token::Less => write!(f, "<"),
+            Token::LessEqual => write!(f, "<="),
+
+            Token::Identifier(ref s) | Token::Str(ref s) => write!(f, "{}", s),
+            Token::Int(i) => write!(f, "{}", i),
+
+            Token::And => write!(f, "&&"),
+            Token::Class => write!(f, "class"),
+            Token::Else => write!(f, "else"),
+            Token::False => write!(f, "false"),
+            Token::Fun => write!(f, "fun"),
+            Token::For => write!(f, "for"),
+            Token::If => write!(f, "if"),
+            Token::Nil => write!(f, "nil"),
+            Token::Or => write!(f, "||"),
+            Token::Print => write!(f, "print"),
+            Token::Return => write!(f, "return"),
+            Token::Super => write!(f, "super"),
+            Token::This => write!(f, "this"),
+            Token::True => write!(f, "true"),
+            Token::Var => write!(f, "var"),
+            Token::While => write!(f, "while"),
+
+            Token::Eof => write!(f, "EOF"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Item {
+    token: Token,
+    line: usize,
+}
+
+impl Item {
+    pub fn token(&self) -> &Token {
+        &self.token
+    }
+
+    pub fn line(&self) -> usize {
+        self.line
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum ScanError {
     UnclosedStr,
@@ -65,6 +131,7 @@ type ScanResult<T> = Result<T, ScanError>;
 pub struct Scanner<'s> {
     src: Chars<'s>,
     peek: Option<char>,
+    line: usize,
 }
 
 impl<'s> Scanner<'s> {
@@ -72,17 +139,18 @@ impl<'s> Scanner<'s> {
         Self {
             src: src.chars(),
             peek: None,
+            line: 1,
         }
     }
 
-    pub fn scan(&mut self) -> Vec<Token> {
-        let mut tokens = Vec::new();
+    pub fn scan(&mut self) -> Vec<Item> {
+        let mut items = Vec::new();
 
         loop {
-            match self.next_token() {
-                Ok(token) => {
-                    let stop = token == Token::Eof;
-                    tokens.push(token);
+            match self.next_item() {
+                Ok(item) => {
+                    let stop = *item.token() == Token::Eof;
+                    items.push(item);
 
                     if stop {
                         break;
@@ -92,59 +160,69 @@ impl<'s> Scanner<'s> {
             }
         }
 
-        tokens
+        items
     }
 
-    pub fn next_token(&mut self) -> ScanResult<Token> {
+    pub fn next_item(&mut self) -> ScanResult<Item> {
         self.eat_whitespace();
 
         match self.get() {
-            Some('(') => Ok(Token::LeftParen),
-            Some(')') => Ok(Token::RightParen),
-            Some('{') => Ok(Token::LeftBrace),
-            Some('}') => Ok(Token::RightBrace),
-            Some(',') => Ok(Token::Comma),
-            Some('.') => Ok(Token::Dot),
-            Some('-') => Ok(Token::Minus),
-            Some('+') => Ok(Token::Plus),
-            Some(';') => Ok(Token::Semicolon),
-            Some('*') => Ok(Token::Star),
+            Some('(') => Ok(self.item(Token::LeftParen)),
+            Some(')') => Ok(self.item(Token::RightParen)),
+            Some('{') => Ok(self.item(Token::LeftBrace)),
+            Some('}') => Ok(self.item(Token::RightBrace)),
+            Some(',') => Ok(self.item(Token::Comma)),
+            Some('.') => Ok(self.item(Token::Dot)),
+            Some('-') => Ok(self.item(Token::Minus)),
+            Some('+') => Ok(self.item(Token::Plus)),
+            Some(';') => Ok(self.item(Token::Semicolon)),
+            Some('*') => Ok(self.item(Token::Star)),
             Some('!') => Ok(if self.next_is('=') {
-                Token::BangEqual
+                self.item(Token::BangEqual)
             } else {
-                Token::Bang
+                self.item(Token::Bang)
             }),
             Some('=') => Ok(if self.next_is('=') {
-                Token::EqualEqual
+                self.item(Token::EqualEqual)
             } else {
-                Token::Equal
+                self.item(Token::Equal)
             }),
             Some('<') => Ok(if self.next_is('=') {
-                Token::LessEqual
+                self.item(Token::LessEqual)
             } else {
-                Token::Less
+                self.item(Token::Less)
             }),
             Some('>') => Ok(if self.next_is('=') {
-                Token::GreaterEqual
+                self.item(Token::GreaterEqual)
             } else {
-                Token::Greater
+                self.item(Token::Greater)
             }),
             Some('/') => if self.next_is('/') {
                 self.eat_line();
-                self.next_token()
+                self.next_item()
             } else {
-                Ok(Token::Slash)
+                Ok(self.item(Token::Slash))
             },
             Some(c) => if c == '"' {
-                Ok(Token::Str(self.eat_str()?))
+                let s = self.eat_str()?;
+                Ok(self.item(Token::Str(s)))
             } else if is_digit(c) {
-                Ok(Token::Int(self.eat_int(c)?))
+                let i = self.eat_int(c)?;
+                Ok(self.item(Token::Int(i)))
             } else if is_alpha_or_underscore(c) {
-                Ok(self.eat_identifier_or_keyword(c))
+                let token = self.eat_identifier_or_keyword(c);
+                Ok(self.item(token))
             } else {
                 panic!("Unexpected character: {}", c);
             },
-            None => Ok(Token::Eof),
+            None => Ok(self.item(Token::Eof)),
+        }
+    }
+
+    fn item(&self, token: Token) -> Item {
+        Item {
+            token,
+            line: self.line,
         }
     }
 
@@ -166,6 +244,7 @@ impl<'s> Scanner<'s> {
     fn eat_line(&mut self) {
         while let Some(c) = self.get() {
             if c == '\n' {
+                self.line += 1;
                 break;
             }
         }
@@ -173,7 +252,9 @@ impl<'s> Scanner<'s> {
 
     fn eat_whitespace(&mut self) {
         while let Some(c) = self.get() {
-            if !c.is_whitespace() {
+            if c == '\n' {
+                self.line += 1;
+            } else if !c.is_whitespace() {
                 self.peek = Some(c);
                 break;
             }
@@ -184,7 +265,9 @@ impl<'s> Scanner<'s> {
         let mut s = String::new();
 
         while let Some(c) = self.get() {
-            if c == '"' {
+            if c == '\n' {
+                self.line += 1;
+            } else if c == '"' {
                 return Ok(s);
             }
             s.push(c);
@@ -260,53 +343,59 @@ fn is_alpha_numeric_or_underscore(c: char) -> bool {
 mod tests {
     use super::*;
 
+    macro_rules! next {
+        ($scanner:expr, $expect:expr) => (
+            assert_eq!(*$scanner.next_item().unwrap().token(), $expect);
+        )
+    }
+
     #[test]
     fn print() {
         let mut scanner = Scanner::new(r#"print "hello, world""#);
-        assert_eq!(scanner.next_token(), Ok(Token::Print));
-        assert_eq!(scanner.next_token(), Ok(Token::Str("hello, world".into())));
-        assert_eq!(scanner.next_token(), Ok(Token::Eof));
+        next!(scanner, Token::Print);
+        next!(scanner, Token::Str("hello, world".into()));
+        next!(scanner, Token::Eof);
     }
 
     #[test]
     fn str() {
         let mut scanner = Scanner::new(r#""a string""#);
-        assert_eq!(scanner.next_token(), Ok(Token::Str("a string".into())));
-        assert_eq!(scanner.next_token(), Ok(Token::Eof));
+        next!(scanner, Token::Str("a string".into()));
+        next!(scanner, Token::Eof);
     }
 
     #[test]
     fn int() {
         let mut scanner = Scanner::new("123");
-        assert_eq!(scanner.next_token(), Ok(Token::Int(123)));
-        assert_eq!(scanner.next_token(), Ok(Token::Eof));
+        next!(scanner, Token::Int(123));
+        next!(scanner, Token::Eof);
     }
 
     #[test]
     fn identifier() {
         let mut scanner = Scanner::new("foo");
-        assert_eq!(scanner.next_token(), Ok(Token::Identifier("foo".into())));
-        assert_eq!(scanner.next_token(), Ok(Token::Eof));
+        next!(scanner, Token::Identifier("foo".into()));
+        next!(scanner, Token::Eof);
     }
 
     #[test]
     fn conditional() {
         let mut scanner = Scanner::new("if (even) { total / 2; } else { total; }");
-        assert_eq!(scanner.next_token(), Ok(Token::If));
-        assert_eq!(scanner.next_token(), Ok(Token::LeftParen));
-        assert_eq!(scanner.next_token(), Ok(Token::Identifier("even".into())));
-        assert_eq!(scanner.next_token(), Ok(Token::RightParen));
-        assert_eq!(scanner.next_token(), Ok(Token::LeftBrace));
-        assert_eq!(scanner.next_token(), Ok(Token::Identifier("total".into())));
-        assert_eq!(scanner.next_token(), Ok(Token::Slash));
-        assert_eq!(scanner.next_token(), Ok(Token::Int(2)));
-        assert_eq!(scanner.next_token(), Ok(Token::Semicolon));
-        assert_eq!(scanner.next_token(), Ok(Token::RightBrace));
-        assert_eq!(scanner.next_token(), Ok(Token::Else));
-        assert_eq!(scanner.next_token(), Ok(Token::LeftBrace));
-        assert_eq!(scanner.next_token(), Ok(Token::Identifier("total".into())));
-        assert_eq!(scanner.next_token(), Ok(Token::Semicolon));
-        assert_eq!(scanner.next_token(), Ok(Token::RightBrace));
-        assert_eq!(scanner.next_token(), Ok(Token::Eof));
+        next!(scanner, Token::If);
+        next!(scanner, Token::LeftParen);
+        next!(scanner, Token::Identifier("even".into()));
+        next!(scanner, Token::RightParen);
+        next!(scanner, Token::LeftBrace);
+        next!(scanner, Token::Identifier("total".into()));
+        next!(scanner, Token::Slash);
+        next!(scanner, Token::Int(2));
+        next!(scanner, Token::Semicolon);
+        next!(scanner, Token::RightBrace);
+        next!(scanner, Token::Else);
+        next!(scanner, Token::LeftBrace);
+        next!(scanner, Token::Identifier("total".into()));
+        next!(scanner, Token::Semicolon);
+        next!(scanner, Token::RightBrace);
+        next!(scanner, Token::Eof);
     }
 }

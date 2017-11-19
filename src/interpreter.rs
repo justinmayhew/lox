@@ -369,8 +369,8 @@ impl fmt::Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
             Value::Fun(ref func) => write!(f, "<fn {}>", func.name()),
-            Value::Class(ref class) => write!(f, "<class {}>", class.name()),
-            Value::Instance(ref instance) => write!(f, "<{} instance>", instance.class_name()),
+            Value::Class(ref class) => write!(f, "{}", class.name()),
+            Value::Instance(ref instance) => write!(f, "{} instance", instance.class_name()),
         }
     }
 }

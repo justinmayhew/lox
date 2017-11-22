@@ -3,7 +3,6 @@ use std::rc::Rc;
 use std::result;
 
 use callable::LoxCallable;
-use class::LoxClass;
 use instance::LoxInstance;
 use parser::Var;
 
@@ -13,9 +12,8 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     Nil,
-    Fun(Rc<LoxCallable>),
-    Class(LoxClass),
-    Instance(LoxInstance),
+    Callable(Rc<LoxCallable>),
+    Instance(Rc<LoxInstance>),
 }
 
 #[derive(Debug)]
@@ -50,13 +48,3 @@ impl fmt::Display for Error {
 
 pub type Result<T> = result::Result<T, Error>;
 pub type ValueResult = Result<Value>;
-
-impl Value {
-    pub fn to_callable(&self) -> Option<Rc<LoxCallable>> {
-        match *self {
-            Value::Fun(ref f) => Some(Rc::clone(f)),
-            Value::Class(ref c) => Some(Rc::new(c.clone())),
-            _ => None,
-        }
-    }
-}

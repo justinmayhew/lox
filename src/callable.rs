@@ -1,3 +1,6 @@
+use std::fmt;
+use std::rc::Rc;
+
 use time;
 
 use environment::Environment;
@@ -6,7 +9,7 @@ use interpreter::Interpreter;
 use parser::Function;
 use primitive::{Error, Value, ValueResult};
 
-pub trait LoxCallable {
+pub trait LoxCallable: fmt::Display {
     fn call(&self, &mut Interpreter, Vec<Value>) -> ValueResult;
     fn arity(&self) -> usize;
     fn name(&self) -> &str;
@@ -28,6 +31,12 @@ impl LoxCallable for Clock {
     }
 }
 
+impl fmt::Display for Clock {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<fn clock>")
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct LoxFunction {
     function: Function,
@@ -44,7 +53,7 @@ impl LoxFunction {
         }
     }
 
-    pub fn bind(&self, instance: LoxInstance) -> Self {
+    pub fn bind(&self, instance: Rc<LoxInstance>) -> Self {
         let env = Environment::with_enclosing(self.closure.clone());
         env.define("this".into(), Value::Instance(instance));
         Self {
@@ -83,5 +92,11 @@ impl LoxCallable for LoxFunction {
 
     fn name(&self) -> &str {
         &self.function.name
+    }
+}
+
+impl fmt::Display for LoxFunction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<fn {}>", self.function.name)
     }
 }

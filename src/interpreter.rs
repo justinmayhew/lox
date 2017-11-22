@@ -1,8 +1,6 @@
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
 use std::mem;
-use std::ops;
 use std::rc::Rc;
 
 use callable::{Clock, LoxFunction};
@@ -19,7 +17,7 @@ pub struct Interpreter {
 impl Default for Interpreter {
     fn default() -> Self {
         let env = Environment::default();
-        env.define("clock".into(), Value::Fun(Rc::new(Clock)));
+        env.define("clock".into(), Value::Callable(Rc::new(Clock)));
 
         Self {
             globals: env.clone(),
@@ -57,7 +55,8 @@ impl Interpreter {
             }
             Stmt::Fun(ref fun) => {
                 let func = LoxFunction::new(fun.clone(), self.env.clone(), false);
-                self.env.define(fun.name.clone(), Value::Fun(Rc::new(func)));
+                self.env
+                    .define(fun.name.clone(), Value::Callable(Rc::new(func)));
                 Ok(())
             }
             Stmt::Class(ref class) => {
@@ -69,9 +68,9 @@ impl Interpreter {
                         LoxFunction::new(method.clone(), self.env.clone(), method.name == "init");
                     methods.insert(method.name.clone(), Rc::new(func));
                 }
-                let lox_class = LoxClass::new(class.name.clone(), methods);
+                let lox_class = Rc::new(LoxClass::new(class.name.clone(), methods));
 
-                self.env.assign(&class.name, Value::Class(lox_class));
+                self.env.assign(&class.name, Value::Callable(lox_class));
                 Ok(())
             }
             Stmt::Return(ref expr) => {
@@ -107,29 +106,34 @@ impl Interpreter {
     fn evaluate(&mut self, node: &ExprNode) -> ValueResult {
         match *node.expr() {
             Expr::Binary(ref left_expr, op, ref right_expr) => {
-                let left = self.evaluate(left_expr)?;
-                let right = self.evaluate(right_expr)?;
+                let line = left_expr.line();
+                let a = self.evaluate(left_expr)?;
+                let b = self.evaluate(right_expr)?;
 
                 match op {
-                    BinOp::Plus => left + right,
-                    BinOp::Minus => left - right,
-                    BinOp::Star => left * right,
-                    BinOp::Slash => left / right,
-
-                    BinOp::BangEqual => Ok(Value::Bool(!eq(left, right)?)),
-                    BinOp::EqualEqual => Ok(Value::Bool(eq(left, right)?)),
-                    BinOp::Greater => Ok(Value::Bool(cmp(left, right)? == Ordering::Greater)),
-                    BinOp::GreaterEqual => {
-                        let ord = cmp(left, right)?;
-                        Ok(Value::Bool(
-                            ord == Ordering::Greater || ord == Ordering::Equal,
-                        ))
-                    }
-                    BinOp::Less => Ok(Value::Bool(cmp(left, right)? == Ordering::Less)),
-                    BinOp::LessEqual => {
-                        let ord = cmp(left, right)?;
-                        Ok(Value::Bool(ord == Ordering::Less || ord == Ordering::Equal))
-                    }
+                    BinOp::EqualEqual => Ok(Value::Bool(is_equal(a, b))),
+                    BinOp::BangEqual => Ok(Value::Bool(!is_equal(a, b))),
+                    BinOp::Plus => match (a, b) {
+                        (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
+                        (Value::Str(a), Value::Str(b)) => Ok(Value::Str(a + &b)),
+                        _ => Err(Error::RuntimeError {
+                            message: "Operands must be two numbers or two strings.".into(),
+                            line,
+                        }),
+                    },
+                    BinOp::Minus => with_numbers(a, b, line, |a, b| Ok(Value::Int(a - b))),
+                    BinOp::Star => with_numbers(a, b, line, |a, b| Ok(Value::Int(a * b))),
+                    BinOp::Slash => with_numbers(a, b, line, |a, b| {
+                        if b == 0 {
+                            Err(Error::DivideByZero)
+                        } else {
+                            Ok(Value::Int(a / b))
+                        }
+                    }),
+                    BinOp::Greater => with_numbers(a, b, line, |a, b| Ok(Value::Bool(a > b))),
+                    BinOp::GreaterEqual => with_numbers(a, b, line, |a, b| Ok(Value::Bool(a >= b))),
+                    BinOp::Less => with_numbers(a, b, line, |a, b| Ok(Value::Bool(a < b))),
+                    BinOp::LessEqual => with_numbers(a, b, line, |a, b| Ok(Value::Bool(a <= b))),
                 }
             }
             Expr::Logical(ref left_expr, op, ref right_expr) => {
@@ -195,42 +199,46 @@ impl Interpreter {
                     arguments.push(self.evaluate(expr)?);
                 }
 
-                let f = match callee.to_callable() {
-                    Some(f) => f,
-                    None => {
-                        return Err(Error::RuntimeError {
-                            message: "Can only call functions and classes.".into(),
+                if let Value::Callable(f) = callee {
+                    if f.arity() == arguments.len() {
+                        f.call(self, arguments)
+                    } else {
+                        Err(Error::RuntimeError {
+                            message: format!(
+                                "Expected {} arguments but got {}.",
+                                f.arity(),
+                                arguments.len()
+                            ),
                             line,
                         })
                     }
-                };
-
-                if arguments.len() == f.arity() {
-                    f.call(self, arguments)
                 } else {
                     Err(Error::RuntimeError {
-                        message: format!(
-                            "Expected {} arguments but got {}.",
-                            f.arity(),
-                            arguments.len()
-                        ),
+                        message: "Can only call functions and classes.".into(),
                         line,
                     })
                 }
             }
             Expr::AnonymousFun(ref fun) => {
                 let callable = LoxFunction::new(fun.clone(), self.env.clone(), false);
-                Ok(Value::Fun(Rc::new(callable)))
+                Ok(Value::Callable(Rc::new(callable)))
             }
             Expr::Get(ref expr, ref name) => {
-                let object = self.evaluate(expr)?;
-                if let Value::Instance(instance) = object {
-                    instance.get(name).ok_or_else(|| {
-                        Error::RuntimeError {
+                let value = self.evaluate(expr)?;
+
+                if let Value::Instance(instance) = value {
+                    if let Some(value) = instance.get_field(name) {
+                        Ok(value)
+                    } else if let Some(method) =
+                        instance.class().get_method(name, Rc::clone(&instance))
+                    {
+                        Ok(Value::Callable(method))
+                    } else {
+                        Err(Error::RuntimeError {
                             message: format!("Undefined property '{}'.", name),
                             line: expr.line(),
-                        }
-                    })
+                        })
+                    }
                 } else {
                     Err(Error::RuntimeError {
                         message: "Only instances have properties.".into(),
@@ -240,7 +248,7 @@ impl Interpreter {
             }
             Expr::Set(ref left, ref name, ref right) => {
                 let object = self.evaluate(left)?;
-                if let Value::Instance(mut instance) = object {
+                if let Value::Instance(instance) = object {
                     let value = self.evaluate(right)?;
                     instance.set(name.clone(), value.clone());
                     Ok(value)
@@ -283,81 +291,34 @@ impl Interpreter {
 
 fn is_truthy(value: &Value) -> bool {
     match *value {
-        Value::Fun(_) | Value::Class(_) | Value::Instance(_) | Value::Str(_) | Value::Int(_) => {
-            true
-        }
+        Value::Callable(_) | Value::Instance(_) | Value::Str(_) | Value::Int(_) => true,
         Value::Bool(b) => b,
         Value::Nil => false,
     }
 }
 
-impl ops::Add for Value {
-    type Output = ValueResult;
-    fn add(self, rhs: Value) -> ValueResult {
-        match (self, rhs) {
-            (Value::Int(left), Value::Int(right)) => Ok(Value::Int(left + right)),
-            (Value::Str(left), Value::Str(right)) => Ok(Value::Str(left + &right)),
-            (left, right) => Err(Error::TypeError(
-                format!("Cannot add {:?} to {:?}", left, right),
-            )),
-        }
-    }
-}
-
-impl ops::Sub for Value {
-    type Output = ValueResult;
-    fn sub(self, rhs: Value) -> ValueResult {
-        match (self, rhs) {
-            (Value::Int(left), Value::Int(right)) => Ok(Value::Int(left - right)),
-            (left, right) => Err(Error::TypeError(
-                format!("Cannot subtract {:?} to {:?}", left, right),
-            )),
-        }
-    }
-}
-
-impl ops::Mul for Value {
-    type Output = ValueResult;
-    fn mul(self, rhs: Value) -> ValueResult {
-        match (self, rhs) {
-            (Value::Int(left), Value::Int(right)) => Ok(Value::Int(left * right)),
-            (left, right) => Err(Error::TypeError(
-                format!("Cannot multiply {:?} to {:?}", left, right),
-            )),
-        }
-    }
-}
-
-impl ops::Div for Value {
-    type Output = ValueResult;
-    fn div(self, rhs: Value) -> ValueResult {
-        match (self, rhs) {
-            (Value::Int(_), Value::Int(0)) => Err(Error::DivideByZero),
-            (Value::Int(left), Value::Int(right)) => Ok(Value::Int(left / right)),
-            (left, right) => Err(Error::TypeError(
-                format!("Cannot divide {:?} to {:?}", left, right),
-            )),
-        }
-    }
-}
-
-fn eq(left: Value, right: Value) -> Result<bool> {
+fn with_numbers<F>(left: Value, right: Value, line: usize, f: F) -> ValueResult
+where
+    F: Fn(i64, i64) -> ValueResult,
+{
     match (left, right) {
-        (Value::Nil, Value::Nil) => Ok(true),
-        (Value::Bool(a), Value::Bool(b)) => Ok(a == b),
-        (Value::Int(left), Value::Int(right)) => Ok(left == right),
-        (Value::Str(ref left), Value::Str(ref right)) => Ok(left == right),
-        (_, _) => Ok(false),
+        (Value::Int(left), Value::Int(right)) => f(left, right),
+        _ => Err(Error::RuntimeError {
+            message: "Operands must be numbers.".into(),
+            line,
+        }),
     }
 }
 
-fn cmp(left: Value, right: Value) -> Result<Ordering> {
+fn is_equal(left: Value, right: Value) -> bool {
     match (left, right) {
-        (Value::Int(left), Value::Int(right)) => Ok(left.cmp(&right)),
-        (Value::Str(left), Value::Str(right)) => Ok(left.cmp(&right)),
-        (left, right) => Err(Error::TypeError(
-            format!("Cannot compare {:?} to {:?}", left, right),
-        )),
+        (Value::Str(a), Value::Str(b)) => a == b,
+        (Value::Int(a), Value::Int(b)) => a == b,
+        (Value::Bool(a), Value::Bool(b)) => a == b,
+        (Value::Nil, Value::Nil) => true,
+        (Value::Callable(a), Value::Callable(b)) => Rc::ptr_eq(&a, &b),
+        (Value::Instance(a), Value::Instance(b)) => Rc::ptr_eq(&a, &b),
+        _ => false,
     }
 }
 
@@ -368,9 +329,8 @@ impl fmt::Display for Value {
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
-            Value::Fun(ref func) => write!(f, "<fn {}>", func.name()),
-            Value::Class(ref class) => write!(f, "{}", class.name()),
-            Value::Instance(ref instance) => write!(f, "{} instance", instance.class_name()),
+            Value::Callable(ref callable) => write!(f, "{}", callable.to_string()),
+            Value::Instance(ref instance) => write!(f, "{} instance", instance.class().name()),
         }
     }
 }

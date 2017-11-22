@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt;
 use std::rc::Rc;
 
 use callable::{LoxCallable, LoxFunction};
@@ -27,7 +28,7 @@ impl LoxClass {
         &self.name
     }
 
-    pub fn get_method(&self, name: &str, instance: LoxInstance) -> Option<Rc<LoxFunction>> {
+    pub fn get_method(&self, name: &str, instance: Rc<LoxInstance>) -> Option<Rc<LoxFunction>> {
         self.methods
             .borrow()
             .get(name)
@@ -41,7 +42,7 @@ impl LoxClass {
 
 impl LoxCallable for LoxClass {
     fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Value>) -> ValueResult {
-        let instance = LoxInstance::new(self.clone());
+        let instance = Rc::new(LoxInstance::new(self.clone()));
 
         match self.initializer() {
             Some(initializer) => initializer.bind(instance).call(interpreter, arguments),
@@ -57,5 +58,11 @@ impl LoxCallable for LoxClass {
 
     fn name(&self) -> &str {
         &self.name
+    }
+}
+
+impl fmt::Display for LoxClass {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }

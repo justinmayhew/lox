@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt;
 use std::mem;
 use std::rc::Rc;
 
@@ -319,24 +318,5 @@ fn is_equal(left: Value, right: Value) -> bool {
         (Value::Callable(a), Value::Callable(b)) => Rc::ptr_eq(&a, &b),
         (Value::Instance(a), Value::Instance(b)) => Rc::ptr_eq(&a, &b),
         _ => false,
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Value::Str(ref s) => write!(f, "{}", s),
-            Value::Int(i) => write!(f, "{}", i),
-            Value::Bool(b) => write!(f, "{}", b),
-            Value::Nil => write!(f, "nil"),
-            Value::Callable(ref callable) => write!(f, "{}", callable.to_string()),
-            Value::Instance(ref instance) => write!(f, "{} instance", instance.class().name()),
-        }
-    }
-}
-
-impl fmt::Debug for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
     }
 }

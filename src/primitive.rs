@@ -6,7 +6,7 @@ use callable::LoxCallable;
 use instance::LoxInstance;
 use parser::Var;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Value {
     Str(String),
     Int(i64),
@@ -14,6 +14,19 @@ pub enum Value {
     Nil,
     Callable(Rc<LoxCallable>),
     Instance(Rc<LoxInstance>),
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Value::Str(ref s) => write!(f, "{}", s),
+            Value::Int(i) => write!(f, "{}", i),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Nil => write!(f, "nil"),
+            Value::Callable(ref callable) => write!(f, "{}", callable.to_string()),
+            Value::Instance(ref instance) => write!(f, "{} instance", instance.class().name()),
+        }
+    }
 }
 
 #[derive(Debug)]

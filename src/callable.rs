@@ -9,12 +9,13 @@ use interpreter::Interpreter;
 use parser::Function;
 use primitive::{Error, Value, ValueResult};
 
-pub trait LoxCallable: fmt::Display {
+pub trait LoxCallable: fmt::Display + fmt::Debug {
     fn call(&self, &mut Interpreter, Vec<Value>) -> ValueResult;
     fn arity(&self) -> usize;
     fn name(&self) -> &str;
 }
 
+#[derive(Debug)]
 pub struct Clock;
 
 impl LoxCallable for Clock {

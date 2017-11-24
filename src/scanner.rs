@@ -27,7 +27,7 @@ pub enum Token {
     LessEqual,
 
     Identifier(String),
-    Str(String),
+    String(String),
     Number(f64),
 
     And,
@@ -74,7 +74,7 @@ impl fmt::Display for Token {
             Token::Less => write!(f, "<"),
             Token::LessEqual => write!(f, "<="),
 
-            Token::Identifier(ref s) | Token::Str(ref s) => write!(f, "{}", s),
+            Token::Identifier(ref s) | Token::String(ref s) => write!(f, "{}", s),
             Token::Number(n) => write!(f, "{}", n),
 
             Token::And => write!(f, "and"),
@@ -205,13 +205,13 @@ impl<'s> Scanner<'s> {
                 Token::Slash
             },
             Some(c) => if c == '"' {
-                Token::Str(self.eat_str()?)
+                Token::String(self.eat_string()?)
             } else if is_digit(c) {
                 Token::Number(self.eat_number(c)?)
             } else if is_alpha_or_underscore(c) {
                 self.eat_identifier_or_keyword(c)
             } else {
-                panic!("Unexpected character: {}", c);
+                panic!("Unexpected character: {}", c)
             },
             None => Token::Eof,
         };
@@ -257,7 +257,7 @@ impl<'s> Scanner<'s> {
         }
     }
 
-    fn eat_str(&mut self) -> ScanResult<String> {
+    fn eat_string(&mut self) -> ScanResult<String> {
         let mut s = String::new();
 
         while let Some(c) = self.get() {
@@ -355,14 +355,14 @@ mod tests {
     fn print() {
         let mut scanner = Scanner::new(r#"print "hello, world""#);
         next!(scanner, Token::Print);
-        next!(scanner, Token::Str("hello, world".into()));
+        next!(scanner, Token::String("hello, world".into()));
         next!(scanner, Token::Eof);
     }
 
     #[test]
     fn str() {
         let mut scanner = Scanner::new(r#""a string""#);
-        next!(scanner, Token::Str("a string".into()));
+        next!(scanner, Token::String("a string".into()));
         next!(scanner, Token::Eof);
     }
 

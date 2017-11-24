@@ -114,7 +114,7 @@ impl Interpreter {
                     BinOp::BangEqual => Ok(Value::Bool(!is_equal(a, b))),
                     BinOp::Plus => match (a, b) {
                         (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
-                        (Value::Str(a), Value::Str(b)) => Ok(Value::Str(a + &b)),
+                        (Value::String(a), Value::String(b)) => Ok(Value::String(a + &b)),
                         _ => Err(Error::RuntimeError {
                             message: "Operands must be two numbers or two strings.".into(),
                             line,
@@ -290,7 +290,7 @@ impl Interpreter {
 
 fn is_truthy(value: &Value) -> bool {
     match *value {
-        Value::Callable(_) | Value::Instance(_) | Value::Str(_) | Value::Number(_) => true,
+        Value::Callable(_) | Value::Instance(_) | Value::String(_) | Value::Number(_) => true,
         Value::Bool(b) => b,
         Value::Nil => false,
     }
@@ -311,7 +311,7 @@ where
 
 fn is_equal(left: Value, right: Value) -> bool {
     match (left, right) {
-        (Value::Str(a), Value::Str(b)) => a == b,
+        (Value::String(a), Value::String(b)) => a == b,
         (Value::Number(a), Value::Number(b)) => a.eq(&b),
         (Value::Bool(a), Value::Bool(b)) => a == b,
         (Value::Nil, Value::Nil) => true,

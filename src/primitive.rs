@@ -8,7 +8,7 @@ use parser::Var;
 
 #[derive(Clone, Debug)]
 pub enum Value {
-    Str(String),
+    String(String),
     Number(f64),
     Bool(bool),
     Nil,
@@ -19,7 +19,7 @@ pub enum Value {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Value::Str(ref s) => write!(f, "{}", s),
+            Value::String(ref s) => write!(f, "{}", s),
             Value::Number(n) => write!(f, "{:?}", n), // Debug format for minus zero.
             Value::Bool(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),

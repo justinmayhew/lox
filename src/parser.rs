@@ -710,7 +710,7 @@ impl Parser {
             Token::Nil => Expr::Literal(Value::Nil),
             Token::This => Expr::This(Var::new("this".into())),
             Token::Number(n) => Expr::Literal(Value::Number(n)),
-            Token::Str(ref s) => Expr::Literal(Value::Str(s.clone())),
+            Token::String(ref s) => Expr::Literal(Value::String(s.clone())),
             Token::Identifier(ref name) => Expr::Var(Var::new(name.clone())),
             Token::LeftParen => {
                 let expr = self.expression()?;

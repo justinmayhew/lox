@@ -113,20 +113,20 @@ impl Interpreter {
                     BinOp::EqualEqual => Ok(Value::Bool(is_equal(a, b))),
                     BinOp::BangEqual => Ok(Value::Bool(!is_equal(a, b))),
                     BinOp::Plus => match (a, b) {
-                        (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
+                        (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
                         (Value::Str(a), Value::Str(b)) => Ok(Value::Str(a + &b)),
                         _ => Err(Error::RuntimeError {
                             message: "Operands must be two numbers or two strings.".into(),
                             line,
                         }),
                     },
-                    BinOp::Minus => with_numbers(a, b, line, |a, b| Ok(Value::Int(a - b))),
-                    BinOp::Star => with_numbers(a, b, line, |a, b| Ok(Value::Int(a * b))),
+                    BinOp::Minus => with_numbers(a, b, line, |a, b| Ok(Value::Number(a - b))),
+                    BinOp::Star => with_numbers(a, b, line, |a, b| Ok(Value::Number(a * b))),
                     BinOp::Slash => with_numbers(a, b, line, |a, b| {
-                        if b == 0 {
+                        if b == 0.0 {
                             Err(Error::DivideByZero)
                         } else {
-                            Ok(Value::Int(a / b))
+                            Ok(Value::Number(a / b))
                         }
                     }),
                     BinOp::Greater => with_numbers(a, b, line, |a, b| Ok(Value::Bool(a > b))),
@@ -158,7 +158,7 @@ impl Interpreter {
 
                 match op {
                     UnaryOp::Minus => match value {
-                        Value::Int(n) => Ok(Value::Int(-n)),
+                        Value::Number(n) => Ok(Value::Number(-n)),
                         val => panic!("Cannot use unary - on {:?}", val),
                     },
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
@@ -290,7 +290,7 @@ impl Interpreter {
 
 fn is_truthy(value: &Value) -> bool {
     match *value {
-        Value::Callable(_) | Value::Instance(_) | Value::Str(_) | Value::Int(_) => true,
+        Value::Callable(_) | Value::Instance(_) | Value::Str(_) | Value::Number(_) => true,
         Value::Bool(b) => b,
         Value::Nil => false,
     }
@@ -298,10 +298,10 @@ fn is_truthy(value: &Value) -> bool {
 
 fn with_numbers<F>(left: Value, right: Value, line: usize, f: F) -> ValueResult
 where
-    F: Fn(i64, i64) -> ValueResult,
+    F: Fn(f64, f64) -> ValueResult,
 {
     match (left, right) {
-        (Value::Int(left), Value::Int(right)) => f(left, right),
+        (Value::Number(left), Value::Number(right)) => f(left, right),
         _ => Err(Error::RuntimeError {
             message: "Operands must be numbers.".into(),
             line,
@@ -312,7 +312,7 @@ where
 fn is_equal(left: Value, right: Value) -> bool {
     match (left, right) {
         (Value::Str(a), Value::Str(b)) => a == b,
-        (Value::Int(a), Value::Int(b)) => a == b,
+        (Value::Number(a), Value::Number(b)) => a.eq(&b),
         (Value::Bool(a), Value::Bool(b)) => a == b,
         (Value::Nil, Value::Nil) => true,
         (Value::Callable(a), Value::Callable(b)) => Rc::ptr_eq(&a, &b),

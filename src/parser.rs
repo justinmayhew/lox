@@ -709,7 +709,7 @@ impl Parser {
             Token::True => Expr::Literal(Value::Bool(true)),
             Token::Nil => Expr::Literal(Value::Nil),
             Token::This => Expr::This(Var::new("this".into())),
-            Token::Int(i) => Expr::Literal(Value::Int(i)),
+            Token::Number(n) => Expr::Literal(Value::Number(n)),
             Token::Str(ref s) => Expr::Literal(Value::Str(s.clone())),
             Token::Identifier(ref name) => Expr::Var(Var::new(name.clone())),
             Token::LeftParen => {

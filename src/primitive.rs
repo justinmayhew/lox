@@ -9,7 +9,7 @@ use parser::Var;
 #[derive(Clone, Debug)]
 pub enum Value {
     Str(String),
-    Int(i64),
+    Number(f64),
     Bool(bool),
     Nil,
     Callable(Rc<LoxCallable>),
@@ -20,7 +20,7 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Value::Str(ref s) => write!(f, "{}", s),
-            Value::Int(i) => write!(f, "{}", i),
+            Value::Number(n) => write!(f, "{:?}", n), // Debug format for minus zero.
             Value::Bool(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
             Value::Callable(ref callable) => write!(f, "{}", callable.to_string()),

@@ -20,7 +20,7 @@ pub struct Clock;
 
 impl LoxCallable for Clock {
     fn call(&self, _: &mut Interpreter, _: Vec<Value>) -> ValueResult {
-        Ok(Value::Int(time::now().to_timespec().sec))
+        Ok(Value::Number(time::now().to_timespec().sec as f64))
     }
 
     fn arity(&self) -> usize {

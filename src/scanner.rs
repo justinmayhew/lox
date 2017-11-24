@@ -1,8 +1,9 @@
 use std::fmt;
-use std::num::ParseIntError;
+use std::iter::Peekable;
+use std::num::ParseFloatError;
 use std::str::Chars;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     LeftParen,
     RightParen,
@@ -27,7 +28,7 @@ pub enum Token {
 
     Identifier(String),
     Str(String),
-    Int(i64),
+    Number(f64),
 
     And,
     Class,
@@ -74,7 +75,7 @@ impl fmt::Display for Token {
             Token::LessEqual => write!(f, "<="),
 
             Token::Identifier(ref s) | Token::Str(ref s) => write!(f, "{}", s),
-            Token::Int(i) => write!(f, "{}", i),
+            Token::Number(n) => write!(f, "{}", n),
 
             Token::And => write!(f, "and"),
             Token::Class => write!(f, "class"),
@@ -98,7 +99,7 @@ impl fmt::Display for Token {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Item {
     token: Token,
     line: usize,
@@ -117,19 +118,19 @@ impl Item {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ScanError {
     UnclosedStr,
-    ParseInt(ParseIntError),
+    ParseFloat(ParseFloatError),
 }
 
-impl From<ParseIntError> for ScanError {
-    fn from(err: ParseIntError) -> ScanError {
-        ScanError::ParseInt(err)
+impl From<ParseFloatError> for ScanError {
+    fn from(err: ParseFloatError) -> ScanError {
+        ScanError::ParseFloat(err)
     }
 }
 
 type ScanResult<T> = Result<T, ScanError>;
 
 pub struct Scanner<'s> {
-    src: Chars<'s>,
+    src: Peekable<Chars<'s>>,
     peek: Option<char>,
     line: usize,
 }
@@ -137,7 +138,7 @@ pub struct Scanner<'s> {
 impl<'s> Scanner<'s> {
     pub fn new(src: &'s str) -> Self {
         Self {
-            src: src.chars(),
+            src: src.chars().peekable(),
             peek: None,
             line: 1,
         }
@@ -207,8 +208,8 @@ impl<'s> Scanner<'s> {
                 let s = self.eat_str()?;
                 Ok(self.item(Token::Str(s)))
             } else if is_digit(c) {
-                let i = self.eat_int(c)?;
-                Ok(self.item(Token::Int(i)))
+                let n = self.eat_number(c)?;
+                Ok(self.item(Token::Number(n)))
             } else if is_alpha_or_underscore(c) {
                 let token = self.eat_identifier_or_keyword(c);
                 Ok(self.item(token))
@@ -276,11 +277,17 @@ impl<'s> Scanner<'s> {
         Err(ScanError::UnclosedStr)
     }
 
-    fn eat_int(&mut self, first: char) -> ScanResult<i64> {
+    fn eat_number(&mut self, first: char) -> ScanResult<f64> {
         let mut s = first.to_string();
+        let mut saw_decimal = false;
 
         while let Some(c) = self.get() {
             if is_digit(c) {
+                s.push(c);
+            } else if !saw_decimal && c == '.'
+                && self.src.peek().map(|c| is_digit(*c)).unwrap_or(false)
+            {
+                saw_decimal = true;
                 s.push(c);
             } else {
                 self.peek = Some(c);
@@ -367,7 +374,7 @@ mod tests {
     #[test]
     fn int() {
         let mut scanner = Scanner::new("123");
-        next!(scanner, Token::Int(123));
+        next!(scanner, Token::Number(123.0));
         next!(scanner, Token::Eof);
     }
 
@@ -388,7 +395,7 @@ mod tests {
         next!(scanner, Token::LeftBrace);
         next!(scanner, Token::Identifier("total".into()));
         next!(scanner, Token::Slash);
-        next!(scanner, Token::Int(2));
+        next!(scanner, Token::Number(2.0));
         next!(scanner, Token::Semicolon);
         next!(scanner, Token::RightBrace);
         next!(scanner, Token::Else);

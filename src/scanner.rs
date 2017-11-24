@@ -167,64 +167,59 @@ impl<'s> Scanner<'s> {
     pub fn next_item(&mut self) -> ScanResult<Item> {
         self.eat_whitespace();
 
-        match self.get() {
-            Some('(') => Ok(self.item(Token::LeftParen)),
-            Some(')') => Ok(self.item(Token::RightParen)),
-            Some('{') => Ok(self.item(Token::LeftBrace)),
-            Some('}') => Ok(self.item(Token::RightBrace)),
-            Some(',') => Ok(self.item(Token::Comma)),
-            Some('.') => Ok(self.item(Token::Dot)),
-            Some('-') => Ok(self.item(Token::Minus)),
-            Some('+') => Ok(self.item(Token::Plus)),
-            Some(';') => Ok(self.item(Token::Semicolon)),
-            Some('*') => Ok(self.item(Token::Star)),
-            Some('!') => Ok(if self.next_is('=') {
-                self.item(Token::BangEqual)
+        let token = match self.get() {
+            Some('(') => Token::LeftParen,
+            Some(')') => Token::RightParen,
+            Some('{') => Token::LeftBrace,
+            Some('}') => Token::RightBrace,
+            Some(',') => Token::Comma,
+            Some('.') => Token::Dot,
+            Some('-') => Token::Minus,
+            Some('+') => Token::Plus,
+            Some(';') => Token::Semicolon,
+            Some('*') => Token::Star,
+            Some('!') => if self.next_is('=') {
+                Token::BangEqual
             } else {
-                self.item(Token::Bang)
-            }),
-            Some('=') => Ok(if self.next_is('=') {
-                self.item(Token::EqualEqual)
+                Token::Bang
+            },
+            Some('=') => if self.next_is('=') {
+                Token::EqualEqual
             } else {
-                self.item(Token::Equal)
-            }),
-            Some('<') => Ok(if self.next_is('=') {
-                self.item(Token::LessEqual)
+                Token::Equal
+            },
+            Some('<') => if self.next_is('=') {
+                Token::LessEqual
             } else {
-                self.item(Token::Less)
-            }),
-            Some('>') => Ok(if self.next_is('=') {
-                self.item(Token::GreaterEqual)
+                Token::Less
+            },
+            Some('>') => if self.next_is('=') {
+                Token::GreaterEqual
             } else {
-                self.item(Token::Greater)
-            }),
+                Token::Greater
+            },
             Some('/') => if self.next_is('/') {
                 self.eat_line();
-                self.next_item()
+                return self.next_item();
             } else {
-                Ok(self.item(Token::Slash))
+                Token::Slash
             },
             Some(c) => if c == '"' {
-                let s = self.eat_str()?;
-                Ok(self.item(Token::Str(s)))
+                Token::Str(self.eat_str()?)
             } else if is_digit(c) {
-                let n = self.eat_number(c)?;
-                Ok(self.item(Token::Number(n)))
+                Token::Number(self.eat_number(c)?)
             } else if is_alpha_or_underscore(c) {
-                let token = self.eat_identifier_or_keyword(c);
-                Ok(self.item(token))
+                self.eat_identifier_or_keyword(c)
             } else {
                 panic!("Unexpected character: {}", c);
             },
-            None => Ok(self.item(Token::Eof)),
-        }
-    }
+            None => Token::Eof,
+        };
 
-    fn item(&self, token: Token) -> Item {
-        Item {
+        Ok(Item {
             token,
             line: self.line,
-        }
+        })
     }
 
     fn get(&mut self) -> Option<char> {

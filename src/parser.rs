@@ -152,11 +152,11 @@ pub enum ParseError {
 impl ParseError {
     pub fn line(&self) -> usize {
         match *self {
-            ParseError::UnexpectedToken(ref item, ..) |
-            ParseError::MissingExpr(ref item) |
-            ParseError::ExpectedIdentifier(ref item, ..) |
-            ParseError::InvalidAssignment(ref item) |
-            ParseError::TooManyParams(ref item, ..) => item.line(),
+            ParseError::UnexpectedToken(ref item, ..)
+            | ParseError::MissingExpr(ref item)
+            | ParseError::ExpectedIdentifier(ref item, ..)
+            | ParseError::InvalidAssignment(ref item)
+            | ParseError::TooManyParams(ref item, ..) => item.line(),
         }
     }
 }
@@ -164,9 +164,9 @@ impl ParseError {
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ParseError::UnexpectedToken(ref item, ref msg) |
-            ParseError::TooManyParams(ref item, ref msg) |
-            ParseError::ExpectedIdentifier(ref item, ref msg) => {
+            ParseError::UnexpectedToken(ref item, ref msg)
+            | ParseError::TooManyParams(ref item, ref msg)
+            | ParseError::ExpectedIdentifier(ref item, ref msg) => {
                 let location = if *item.token() == Token::Eof {
                     "end".into()
                 } else {
@@ -311,14 +311,14 @@ impl Parser {
             }
 
             match *self.peek().token() {
-                Token::Class |
-                Token::Fun |
-                Token::Var |
-                Token::For |
-                Token::If |
-                Token::While |
-                Token::Print |
-                Token::Return => return,
+                Token::Class
+                | Token::Fun
+                | Token::Var
+                | Token::For
+                | Token::If
+                | Token::While
+                | Token::Print
+                | Token::Return => return,
                 _ => {}
             }
 

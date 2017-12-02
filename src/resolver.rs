@@ -96,11 +96,7 @@ impl Resolver {
                 let enclosing_class = self.current_class;
                 self.current_class = ClassKind::Class;
 
-                self.begin_scope();
-                self.scopes
-                    .last_mut()
-                    .unwrap()
-                    .insert("this".into(), Var::initialized());
+                self.begin_scope(Some("this".into()));
 
                 for method in &mut class.methods {
                     let declaration = if method.name == "init" {
@@ -128,7 +124,7 @@ impl Resolver {
                 }
             }
             Stmt::Block(ref mut body) => {
-                self.begin_scope();
+                self.begin_scope(None);
                 for stmt in body {
                     self.resolve_stmt(stmt);
                 }
@@ -204,7 +200,7 @@ impl Resolver {
         let enclosing_fn = self.current_fn;
         self.current_fn = kind;
 
-        self.begin_scope();
+        self.begin_scope(None);
         for param in params {
             self.declare(param.clone());
             self.define(param.clone());
@@ -217,42 +213,35 @@ impl Resolver {
         self.current_fn = enclosing_fn;
     }
 
-    fn begin_scope(&mut self) {
-        self.scopes.push(HashMap::new());
+    fn begin_scope(&mut self, name: Option<String>) {
+        let mut scope = HashMap::new();
+        if let Some(name) = name {
+            scope.insert(name, Var::initialized());
+        }
+        self.scopes.push(scope);
     }
 
     fn end_scope(&mut self) {
-        {
-            let scope = self.scopes.last_mut().unwrap();
-            for (key, var) in scope.iter() {
-                if !var.is_used() && key != "this" {
-                    warn!("Unused variable: {}", key);
-                }
+        for (name, var) in self.scopes.pop().expect("missing scope") {
+            if !var.is_used() && name != "this" {
+                warn!("Unused variable: {}", name);
             }
         }
-
-        self.scopes.pop();
     }
 
     fn declare(&mut self, name: String) {
-        if self.scopes.is_empty() {
-            return;
+        if let Some(scope) = self.scopes.last_mut() {
+            if scope.contains_key(&name) {
+                panic!("Variable with this name is already declared in this scope.");
+            }
+            scope.insert(name, Var::uninitialized());
         }
-
-        let scope = self.scopes.last_mut().unwrap();
-        if scope.contains_key(&name) {
-            panic!("Variable with this name is already declared in this scope.");
-        }
-        scope.insert(name, Var::uninitialized());
     }
 
     fn define(&mut self, name: String) {
-        if self.scopes.is_empty() {
-            return;
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name, Var::initialized());
         }
-
-        let scope = self.scopes.last_mut().unwrap();
-        scope.insert(name, Var::initialized());
     }
 
     fn resolve_local(&mut self, var: &mut parser::Var) {

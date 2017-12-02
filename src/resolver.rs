@@ -245,12 +245,10 @@ impl Resolver {
     }
 
     fn resolve_local(&mut self, var: &mut parser::Var) {
-        let len = self.scopes.len();
-
-        for i in (0..len).rev() {
-            if let Some(ref mut v) = self.scopes[i].get_mut(&var.name) {
+        for (i, scope) in self.scopes.iter_mut().rev().enumerate() {
+            if let Some(ref mut v) = scope.get_mut(&var.name) {
                 v.increment_usages();
-                var.hops = Some(len - 1 - i);
+                var.hops = Some(i);
                 return;
             }
         }

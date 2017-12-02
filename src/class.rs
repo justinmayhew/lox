@@ -44,10 +44,13 @@ impl LoxCallable for LoxClass {
     fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Value>) -> ValueResult {
         let instance = Rc::new(LoxInstance::new(self.clone()));
 
-        match self.initializer() {
-            Some(initializer) => initializer.bind(instance).call(interpreter, arguments),
-            None => Ok(Value::Instance(instance)),
+        if let Some(initializer) = self.initializer() {
+            initializer
+                .bind(Rc::clone(&instance))
+                .call(interpreter, arguments)?;
         }
+
+        Ok(Value::Instance(instance))
     }
 
     fn arity(&self) -> usize {

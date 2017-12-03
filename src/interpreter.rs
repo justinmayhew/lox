@@ -5,11 +5,10 @@ use std::rc::Rc;
 use callable::{Clock, LoxFunction};
 use class::LoxClass;
 use environment::Environment;
-use parser::{BinOp, Expr, ExprNode, LogicOp, Stmt, UnaryOp, Var};
+use parser::{BinOp, Expr, ExprNode, LogicOp, Stmt, UnaryOp};
 use primitive::{Error, Result, Value, ValueResult};
 
 pub struct Interpreter {
-    globals: Environment,
     env: Environment,
 }
 
@@ -17,11 +16,7 @@ impl Default for Interpreter {
     fn default() -> Self {
         let env = Environment::default();
         env.define("clock".into(), Value::Callable(Rc::new(Clock)));
-
-        Self {
-            globals: env.clone(),
-            env: env,
-        }
+        Self { env }
     }
 }
 
@@ -69,7 +64,8 @@ impl Interpreter {
                 }
                 let lox_class = Rc::new(LoxClass::new(class.name.clone(), methods));
 
-                self.env.assign(&class.name, Value::Callable(lox_class));
+                self.env
+                    .assign(class.name.clone(), Value::Callable(lox_class));
                 Ok(())
             }
             Stmt::Return(ref expr) => {
@@ -164,29 +160,25 @@ impl Interpreter {
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
                 }
             }
-            Expr::Var(ref var) | Expr::This(ref var) => match self.look_up_variable(var) {
-                Some(value) => Ok(value),
-                None => Err(Error::UndefinedVar {
-                    var: var.clone(),
-                    line: node.line(),
-                }),
-            },
+            Expr::Var(ref var) | Expr::This(ref var) => {
+                self.env.ancestor(var.hops).get(&var.name).ok_or_else(|| {
+                    Error::UndefinedVar {
+                        var: var.clone(),
+                        line: node.line(),
+                    }
+                })
+            }
             Expr::VarAssign(ref var, ref expr) => {
                 let value = self.evaluate(expr)?;
+                let env = self.env.ancestor(var.hops);
 
-                match var.hops {
-                    Some(hops) => {
-                        self.env.assign_at(&var.name, value.clone(), hops);
-                        Ok(value)
-                    }
-                    None => if self.globals.assign(&var.name, value.clone()) {
-                        Ok(value)
-                    } else {
-                        Err(Error::UndefinedVar {
-                            var: var.clone(),
-                            line: node.line(),
-                        })
-                    },
+                if env.assign(var.name.clone(), value.clone()) {
+                    Ok(value)
+                } else {
+                    Err(Error::UndefinedVar {
+                        var: var.clone(),
+                        line: node.line(),
+                    })
                 }
             }
             Expr::Call(ref callee, ref argument_exprs) => {
@@ -275,16 +267,6 @@ impl Interpreter {
         // Restore previous environment.
         self.env = previous;
         result
-    }
-
-    fn look_up_variable(&self, var: &Var) -> Option<Value> {
-        match var.hops {
-            Some(hops) => Some(self.env.get_at(&var.name, hops)),
-            None => match self.globals.get(&var.name) {
-                Some(value) => Some(value),
-                None => None,
-            },
-        }
     }
 }
 

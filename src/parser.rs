@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use std::fmt;
+use std::usize;
 
 use primitive::Value;
 use scanner::{Item, Token};
@@ -65,12 +66,15 @@ pub enum LogicOp {
 #[derive(Clone, Debug)]
 pub struct Var {
     pub name: String,
-    pub hops: Option<usize>,
+    pub hops: usize,
 }
 
 impl Var {
     fn new(name: String) -> Self {
-        Self { name, hops: None }
+        Self {
+            name,
+            hops: usize::MAX,
+        }
     }
 }
 

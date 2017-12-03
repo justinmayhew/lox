@@ -165,11 +165,11 @@ impl Resolver {
                         }
                     }
                 }
-                self.resolve_local(var);
+                self.resolve_var(var);
             }
             Expr::VarAssign(ref mut var, ref mut expr) => {
                 self.resolve_expr(expr);
-                self.resolve_local(var);
+                self.resolve_var(var);
             }
             Expr::Call(ref mut callee, ref mut args) => {
                 self.resolve_expr(callee);
@@ -191,7 +191,7 @@ impl Resolver {
                 if let ClassKind::None = self.current_class {
                     panic!("Cannot use 'this' outside of a class.");
                 }
-                self.resolve_local(var);
+                self.resolve_var(var);
             }
         }
     }
@@ -244,15 +244,16 @@ impl Resolver {
         }
     }
 
-    fn resolve_local(&mut self, var: &mut parser::Var) {
+    fn resolve_var(&mut self, var: &mut parser::Var) {
         for (i, scope) in self.scopes.iter_mut().rev().enumerate() {
             if let Some(ref mut v) = scope.get_mut(&var.name) {
                 v.increment_usages();
-                var.hops = Some(i);
+                var.hops = i;
                 return;
             }
         }
 
         // Not found. Assume it is global.
+        var.hops = self.scopes.len();
     }
 }

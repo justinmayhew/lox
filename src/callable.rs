@@ -77,7 +77,7 @@ impl LoxCallable for LoxFunction {
         let result = interpreter.execute_block(&self.function.body, env.clone());
 
         if self.is_initializer && result.is_ok() {
-            return Ok(env.get_at("this", 1));
+            return Ok(env.ancestor(1).get("this").unwrap());
         }
 
         match result {

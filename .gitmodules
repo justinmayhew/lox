@@ -1,0 +1,4 @@
+[submodule "craftinginterpreters"]
+	path = craftinginterpreters
+	url = https://github.com/mayhewj/craftinginterpreters
+	branch = import-test

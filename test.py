@@ -1,29 +1,23 @@
 #!/usr/bin/env python3
-
-import glob
-import subprocess
 import sys
+from craftinginterpreters.util import test
 
-def err(msg):
-    print(f"\033[1;31m{msg}\033[0;0m", file=sys.stderr)
+NAME = 'rlox'
+TESTS = test.INTERPRETERS['chap12_classes'].tests.items()
 
-def exec(path):
-    out_path = path.replace('.lox', '.out')
-    with open(out_path) as f:
-        expected = f.read()
+test.INTERPRETERS[NAME] = test.Interpreter(
+    name=NAME,
+    language='rust',
+    args=['target/release/lox'],
+    tests={f'craftinginterpreters/{path}': state for path, state in TESTS},
+)
 
-    output = subprocess.check_output(['target/release/lox', path]).decode('utf-8')
+if len(sys.argv) > 2:
+    print('Usage: test.py [filter]', file=sys.stderr)
+    sys.exit(1)
 
-    if output != expected:
-        print(f"Output: '{output}'")
-        print(f"Expected: '{expected}'")
-        raise AssertionError
+if len(sys.argv) == 2:
+    test.filter_path = sys.argv[1]
 
-subprocess.run(['cargo', 'build', '--release'])
-
-for path in glob.glob('t/*.lox'):
-    print(f"Checking {path}...")
-    try:
-        exec(path)
-    except FileNotFoundError:
-        err(f"Skipping {path} because it doesn't have a .out file")
+if not test.run_suite(NAME):
+    sys.exit(1)

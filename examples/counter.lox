@@ -9,6 +9,6 @@ fun makeCounter() {
 }
 
 var counter = makeCounter();
-counter(); // "1".
-counter(); // "2".
-counter(); // "3".
+counter();
+counter();
+counter();

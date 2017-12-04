@@ -48,7 +48,7 @@ fn execute_file(filename: &str) {
 
     if let Err(err) = Interpreter::default().execute(&stmts) {
         eprintln!("{}\n[line {}]", err, err.line());
-        process::exit(65);
+        process::exit(70);
     }
 }
 

@@ -153,9 +153,13 @@ impl Interpreter {
                 let value = self.evaluate(expr)?;
 
                 match op {
-                    UnaryOp::Minus => match value {
-                        Value::Number(n) => Ok(Value::Number(-n)),
-                        val => panic!("Cannot use unary - on {:?}", val),
+                    UnaryOp::Minus => if let Value::Number(n) = value {
+                        Ok(Value::Number(-n))
+                    } else {
+                        Err(Error::RuntimeError {
+                            message: "Operand must be a number.".into(),
+                            line: expr.line(),
+                        })
                     },
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
                 }

@@ -11,3 +11,8 @@ pub mod parser;
 pub mod primitive;
 pub mod resolver;
 pub mod scanner;
+
+use std::error::Error;
+use std::result;
+
+pub type Result<T> = result::Result<T, Box<Error>>;

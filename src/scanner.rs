@@ -1,7 +1,8 @@
 use std::fmt;
 use std::iter::Peekable;
-use std::num::ParseFloatError;
 use std::str::Chars;
+
+use Result;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
@@ -113,21 +114,15 @@ impl Item {
     pub fn line(&self) -> usize {
         self.line
     }
-}
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum ScanError {
-    UnclosedStr,
-    ParseFloat(ParseFloatError),
-}
-
-impl From<ParseFloatError> for ScanError {
-    fn from(err: ParseFloatError) -> ScanError {
-        ScanError::ParseFloat(err)
+    pub fn location(&self) -> String {
+        if self.token == Token::Eof {
+            "end".into()
+        } else {
+            format!("'{}'", self.token)
+        }
     }
 }
-
-type ScanResult<T> = Result<T, ScanError>;
 
 pub struct Scanner<'s> {
     src: Peekable<Chars<'s>>,
@@ -144,8 +139,9 @@ impl<'s> Scanner<'s> {
         }
     }
 
-    pub fn scan(&mut self) -> Vec<Item> {
+    pub fn scan(&mut self) -> (Vec<Item>, bool) {
         let mut items = Vec::new();
+        let mut had_error = false;
 
         loop {
             match self.next_item() {
@@ -157,14 +153,17 @@ impl<'s> Scanner<'s> {
                         break;
                     }
                 }
-                Err(e) => panic!("Error scanning: {:?}", e),
+                Err(err) => {
+                    eprintln!("[line {}] Error: {}.", self.line, err.description());
+                    had_error = true;
+                }
             }
         }
 
-        items
+        (items, had_error)
     }
 
-    pub fn next_item(&mut self) -> ScanResult<Item> {
+    pub fn next_item(&mut self) -> Result<Item> {
         self.eat_whitespace();
 
         let token = match self.get() {
@@ -211,7 +210,7 @@ impl<'s> Scanner<'s> {
             } else if is_alpha_or_underscore(c) {
                 self.eat_identifier_or_keyword(c)
             } else {
-                panic!("Unexpected character: {}", c)
+                return Err(From::from("Unexpected character"));
             },
             None => Token::Eof,
         };
@@ -257,7 +256,7 @@ impl<'s> Scanner<'s> {
         }
     }
 
-    fn eat_string(&mut self) -> ScanResult<String> {
+    fn eat_string(&mut self) -> Result<String> {
         let mut s = String::new();
 
         while let Some(c) = self.get() {
@@ -269,10 +268,10 @@ impl<'s> Scanner<'s> {
             s.push(c);
         }
 
-        Err(ScanError::UnclosedStr)
+        Err(From::from("Unterminated string"))
     }
 
-    fn eat_number(&mut self, first: char) -> ScanResult<f64> {
+    fn eat_number(&mut self, first: char) -> Result<f64> {
         let mut s = first.to_string();
         let mut saw_decimal = false;
 
@@ -360,14 +359,14 @@ mod tests {
     }
 
     #[test]
-    fn str() {
+    fn string() {
         let mut scanner = Scanner::new(r#""a string""#);
         next!(scanner, Token::String("a string".into()));
         next!(scanner, Token::Eof);
     }
 
     #[test]
-    fn int() {
+    fn number() {
         let mut scanner = Scanner::new("123");
         next!(scanner, Token::Number(123.0));
         next!(scanner, Token::Eof);

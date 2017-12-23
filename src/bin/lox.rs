@@ -23,26 +23,22 @@ fn main() {
 }
 
 fn execute_file(filename: &str) {
-    // Get the source code.
     let mut file = File::open(filename).expect("file not found");
     let mut src = String::new();
     file.read_to_string(&mut src).expect("error reading file");
 
-    // Lex the tokens.
     let mut scanner = Scanner::new(&src);
-    let tokens = scanner.scan();
+    let (tokens, scan_err) = scanner.scan();
 
-    // Parse the list of statements.
     let mut parser = Parser::new(tokens);
     let mut stmts = match parser.parse() {
         Ok(stmts) => stmts,
-        Err(errs) => {
-            for err in errs {
-                eprintln!("[line {}] {}", err.line(), err);
-            }
-            process::exit(65)
-        }
+        Err(()) => process::exit(65),
     };
+
+    if scan_err {
+        process::exit(65)
+    }
 
     resolve(&mut stmts);
 
@@ -79,21 +75,23 @@ fn repl() {
 }
 
 fn execute_line(interpreter: &mut Interpreter, line: &str) {
-    let mut parser = Parser::new(Scanner::new(line).scan());
+    let mut scanner = Scanner::new(line);
+    let (tokens, scan_err) = scanner.scan();
+
+    let mut parser = Parser::new(tokens);
 
     let mut stmts = if let Ok(expr) = parser.expression() {
         vec![Stmt::Print(expr)]
     } else {
         match parser.reset().parse() {
             Ok(stmts) => stmts,
-            Err(errs) => {
-                for err in errs {
-                    eprintln!("[line {}] {}", err.line(), err);
-                }
-                return;
-            }
+            Err(()) => return,
         }
     };
+
+    if scan_err {
+        return;
+    }
 
     resolve(&mut stmts);
     if let Err(err) = interpreter.execute(&stmts) {

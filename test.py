@@ -7,7 +7,7 @@ TESTS = test.INTERPRETERS['chap12_classes'].tests.items()
 
 test.INTERPRETERS[NAME] = test.Interpreter(
     name=NAME,
-    language='rust',
+    language='java',
     args=['target/release/lox'],
     tests={f'craftinginterpreters/{path}': state for path, state in TESTS},
 )

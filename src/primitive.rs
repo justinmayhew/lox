@@ -20,7 +20,12 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Value::String(ref s) => write!(f, "{}", s),
-            Value::Number(n) => write!(f, "{:?}", n), // Debug format for minus zero.
+            Value::Number(n) => if n == 0.0 && n.is_sign_negative() {
+                // The JVM prints negative zero with a sign.
+                write!(f, "-{}", n)
+            } else {
+                write!(f, "{}", n)
+            },
             Value::Bool(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
             Value::Callable(ref callable) => write!(f, "{}", callable.to_string()),

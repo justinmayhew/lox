@@ -167,14 +167,13 @@ impl Interpreter {
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
                 }
             }
-            Expr::Var(ref var) | Expr::This(ref var) => {
-                self.env.ancestor(var.hops).get(var.name()).ok_or_else(|| {
-                    Error::UndefinedVar {
-                        var: var.clone(),
-                        line: node.line(),
-                    }
-                })
-            }
+            Expr::Var(ref var) | Expr::This(ref var) => self.env
+                .ancestor(var.hops)
+                .get(var.name())
+                .ok_or_else(|| Error::UndefinedVar {
+                    var: var.clone(),
+                    line: node.line(),
+                }),
             Expr::VarAssign(ref var, ref expr) => {
                 let value = self.evaluate(expr)?;
                 let env = self.env.ancestor(var.hops);

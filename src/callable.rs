@@ -6,8 +6,14 @@ use time;
 use environment::Environment;
 use instance::LoxInstance;
 use interpreter::Interpreter;
-use parser::Function;
+use parser::{FunctionDecl, FunctionExpr, Identifier, Stmt};
 use primitive::{Error, Value, ValueResult};
+
+#[derive(Clone, Debug)]
+pub enum Function {
+    Decl(FunctionDecl),
+    Expr(FunctionExpr),
+}
 
 pub trait LoxCallable: fmt::Display + fmt::Debug {
     fn call(&self, &mut Interpreter, Vec<Value>) -> ValueResult;
@@ -63,6 +69,20 @@ impl LoxFunction {
             is_initializer: self.is_initializer,
         }
     }
+
+    fn parameters(&self) -> &[Identifier] {
+        match self.function {
+            Function::Decl(ref f) => &f.parameters,
+            Function::Expr(ref f) => &f.parameters,
+        }
+    }
+
+    fn body(&self) -> &[Stmt] {
+        match self.function {
+            Function::Decl(ref f) => &f.body,
+            Function::Expr(ref f) => &f.body,
+        }
+    }
 }
 
 impl LoxCallable for LoxFunction {
@@ -70,11 +90,11 @@ impl LoxCallable for LoxFunction {
         let env = Environment::with_enclosing(self.closure.clone());
 
         // Bind the parameters to the arguments the function was called with.
-        for (key, value) in self.function.parameters.iter().zip(arguments.iter()) {
-            env.define(key.clone(), value.clone());
+        for (parameter, value) in self.parameters().iter().zip(arguments.iter()) {
+            env.define(parameter.name.clone(), value.clone());
         }
 
-        let result = interpreter.execute_block(&self.function.body, env.clone());
+        let result = interpreter.execute_block(self.body(), env.clone());
 
         if self.is_initializer && result.is_ok() {
             return Ok(env.ancestor(1).get("this").unwrap());
@@ -88,16 +108,22 @@ impl LoxCallable for LoxFunction {
     }
 
     fn arity(&self) -> usize {
-        self.function.parameters.len()
+        match self.function {
+            Function::Decl(ref f) => f.parameters.len(),
+            Function::Expr(ref f) => f.parameters.len(),
+        }
     }
 
     fn name(&self) -> &str {
-        &self.function.name
+        match self.function {
+            Function::Decl(ref f) => f.name(),
+            Function::Expr(_) => "anonymous",
+        }
     }
 }
 
 impl fmt::Display for LoxFunction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "<fn {}>", self.function.name)
+        write!(f, "<fn {}>", self.name())
     }
 }

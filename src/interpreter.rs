@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 
-use callable::{Clock, LoxFunction};
+use callable::{Clock, Function, LoxCallable, LoxFunction};
 use class::LoxClass;
 use environment::Environment;
 use parser::{BinOp, Expr, ExprNode, LogicOp, Stmt, UnaryOp};
@@ -15,7 +15,7 @@ pub struct Interpreter {
 impl Default for Interpreter {
     fn default() -> Self {
         let env = Environment::default();
-        env.define("clock".into(), Value::Callable(Rc::new(Clock)));
+        env.define(Clock.name().into(), Value::Callable(Rc::new(Clock)));
         Self { env }
     }
 }
@@ -38,37 +38,40 @@ impl Interpreter {
                 println!("{}", self.evaluate(expr)?);
                 Ok(())
             }
-            Stmt::VarDecl(ref name, ref initializer) => {
+            Stmt::VarDecl(ref identifier, ref initializer) => {
                 let value = match *initializer {
                     Some(ref expr) => self.evaluate(expr)?,
                     None => Value::Nil,
                 };
 
-                self.env.define(name.clone(), value);
+                self.env.define(identifier.name.clone(), value);
                 Ok(())
             }
             Stmt::Fun(ref fun) => {
-                let func = LoxFunction::new(fun.clone(), self.env.clone(), false);
+                let func = LoxFunction::new(Function::Decl(fun.clone()), self.env.clone(), false);
                 self.env
-                    .define(fun.name.clone(), Value::Callable(Rc::new(func)));
+                    .define(fun.name().into(), Value::Callable(Rc::new(func)));
                 Ok(())
             }
             Stmt::Class(ref class) => {
-                self.env.define(class.name.clone(), Value::Nil);
+                self.env.define(class.name().into(), Value::Nil);
 
                 let mut methods = HashMap::new();
                 for method in &class.methods {
-                    let func =
-                        LoxFunction::new(method.clone(), self.env.clone(), method.name == "init");
-                    methods.insert(method.name.clone(), Rc::new(func));
+                    let func = LoxFunction::new(
+                        Function::Decl(method.clone()),
+                        self.env.clone(),
+                        method.name() == "init",
+                    );
+                    methods.insert(method.name().into(), Rc::new(func));
                 }
-                let lox_class = Rc::new(LoxClass::new(class.name.clone(), methods));
+                let lox_class = Rc::new(LoxClass::new(class.name().into(), methods));
 
                 self.env
-                    .assign(class.name.clone(), Value::Callable(lox_class));
+                    .assign(class.name().into(), Value::Callable(lox_class));
                 Ok(())
             }
-            Stmt::Return(ref expr) => {
+            Stmt::Return(ref expr, _) => {
                 let value = if let Some(ref expr) = *expr {
                     self.evaluate(expr)?
                 } else {
@@ -165,7 +168,7 @@ impl Interpreter {
                 }
             }
             Expr::Var(ref var) | Expr::This(ref var) => {
-                self.env.ancestor(var.hops).get(&var.name).ok_or_else(|| {
+                self.env.ancestor(var.hops).get(var.name()).ok_or_else(|| {
                     Error::UndefinedVar {
                         var: var.clone(),
                         line: node.line(),
@@ -176,7 +179,7 @@ impl Interpreter {
                 let value = self.evaluate(expr)?;
                 let env = self.env.ancestor(var.hops);
 
-                if env.assign(var.name.clone(), value.clone()) {
+                if env.assign(var.name().into(), value.clone()) {
                     Ok(value)
                 } else {
                     Err(Error::UndefinedVar {
@@ -214,23 +217,25 @@ impl Interpreter {
                     })
                 }
             }
-            Expr::AnonymousFun(ref fun) => {
-                let callable = LoxFunction::new(fun.clone(), self.env.clone(), false);
+            Expr::Fun(ref fun) => {
+                let callable =
+                    LoxFunction::new(Function::Expr(fun.clone()), self.env.clone(), false);
                 Ok(Value::Callable(Rc::new(callable)))
             }
-            Expr::Get(ref expr, ref name) => {
+            Expr::Get(ref expr, ref identifier) => {
                 let value = self.evaluate(expr)?;
 
                 if let Value::Instance(instance) = value {
-                    if let Some(value) = instance.get_field(name) {
+                    if let Some(value) = instance.get_field(&identifier.name) {
                         Ok(value)
-                    } else if let Some(method) =
-                        instance.class().get_method(name, Rc::clone(&instance))
+                    } else if let Some(method) = instance
+                        .class()
+                        .get_method(&identifier.name, Rc::clone(&instance))
                     {
                         Ok(Value::Callable(method))
                     } else {
                         Err(Error::RuntimeError {
-                            message: format!("Undefined property '{}'.", name),
+                            message: format!("Undefined property '{}'.", identifier.name),
                             line: expr.line(),
                         })
                     }
@@ -241,11 +246,11 @@ impl Interpreter {
                     })
                 }
             }
-            Expr::Set(ref left, ref name, ref right) => {
+            Expr::Set(ref left, ref identifier, ref right) => {
                 let object = self.evaluate(left)?;
                 if let Value::Instance(instance) = object {
                     let value = self.evaluate(right)?;
-                    instance.set(name.clone(), value.clone());
+                    instance.set(identifier.name.clone(), value.clone());
                     Ok(value)
                 } else {
                     Err(Error::RuntimeError {

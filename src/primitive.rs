@@ -54,7 +54,9 @@ impl fmt::Display for Error {
             Error::RuntimeError { ref message, .. } => write!(f, "{}", message),
             Error::TypeError(ref msg) => write!(f, "TypeError {}", msg),
             Error::DivideByZero => write!(f, "DivideByZero: division by zero"),
-            Error::UndefinedVar { ref var, .. } => write!(f, "Undefined variable '{}'.", var.name),
+            Error::UndefinedVar { ref var, .. } => {
+                write!(f, "Undefined variable '{}'.", var.name())
+            }
         }
     }
 }

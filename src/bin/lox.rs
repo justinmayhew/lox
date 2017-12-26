@@ -14,6 +14,9 @@ use lox::parser::{Parser, Stmt};
 use lox::resolver::resolve;
 use lox::scanner::Scanner;
 
+const ERROR_CODE: i32 = 65;
+const RUNTIME_ERROR_CODE: i32 = 70;
+
 fn main() {
     if let Some(filename) = env::args().nth(1) {
         execute_file(&filename);
@@ -33,18 +36,16 @@ fn execute_file(filename: &str) {
     let mut parser = Parser::new(tokens);
     let mut stmts = match parser.parse() {
         Ok(stmts) => stmts,
-        Err(()) => process::exit(65),
+        Err(()) => process::exit(ERROR_CODE),
     };
 
-    if scan_err {
-        process::exit(65)
+    if scan_err || resolve(&mut stmts).is_err() {
+        process::exit(ERROR_CODE)
     }
-
-    resolve(&mut stmts);
 
     if let Err(err) = Interpreter::default().execute(&stmts) {
         eprintln!("{}\n[line {}]", err, err.line());
-        process::exit(70);
+        process::exit(RUNTIME_ERROR_CODE);
     }
 }
 
@@ -65,7 +66,7 @@ fn repl() {
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => break,
             Err(err) => {
-                println!("Error: {:?}", err);
+                eprintln!("Error: {:?}", err);
                 break;
             }
         }
@@ -89,11 +90,10 @@ fn execute_line(interpreter: &mut Interpreter, line: &str) {
         }
     };
 
-    if scan_err {
+    if scan_err || resolve(&mut stmts).is_err() {
         return;
     }
 
-    resolve(&mut stmts);
     if let Err(err) = interpreter.execute(&stmts) {
         eprintln!("{}", err);
     }

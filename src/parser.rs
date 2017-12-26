@@ -64,17 +64,31 @@ pub enum LogicOp {
 
 #[derive(Clone, Debug)]
 pub struct Var {
-    pub name: String,
+    pub identifier: Identifier,
     pub hops: usize,
 }
 
 impl Var {
-    fn new(name: String) -> Self {
+    fn new(identifier: Identifier) -> Self {
         Self {
-            name,
+            identifier,
             hops: usize::MAX,
         }
     }
+
+    pub fn name(&self) -> &str {
+        &self.identifier.name
+    }
+
+    pub fn line(&self) -> usize {
+        self.identifier.line
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Identifier {
+    pub name: String,
+    pub line: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -87,9 +101,9 @@ pub enum Expr {
     Var(Var),
     VarAssign(Var, Box<ExprNode>),
     Call(Box<ExprNode>, Vec<ExprNode>),
-    AnonymousFun(Function),
-    Get(Box<ExprNode>, String),
-    Set(Box<ExprNode>, String, Box<ExprNode>),
+    Fun(FunctionExpr),
+    Get(Box<ExprNode>, Identifier),
+    Set(Box<ExprNode>, Identifier, Box<ExprNode>),
     This(Var),
 }
 
@@ -118,26 +132,44 @@ impl ExprNode {
 }
 
 #[derive(Clone, Debug)]
-pub struct Function {
-    pub name: String,
-    pub parameters: Vec<String>,
+pub struct FunctionDecl {
+    pub identifier: Identifier,
+    pub parameters: Vec<Identifier>,
+    pub body: Vec<Stmt>,
+}
+
+impl FunctionDecl {
+    pub fn name(&self) -> &str {
+        &self.identifier.name
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FunctionExpr {
+    pub parameters: Vec<Identifier>,
     pub body: Vec<Stmt>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Class {
-    pub name: String,
-    pub methods: Vec<Function>,
+    pub identifier: Identifier,
+    pub methods: Vec<FunctionDecl>,
+}
+
+impl Class {
+    pub fn name(&self) -> &str {
+        &self.identifier.name
+    }
 }
 
 #[derive(Clone, Debug)]
 pub enum Stmt {
     Expr(ExprNode),
     Print(ExprNode),
-    VarDecl(String, Option<ExprNode>),
-    Fun(Function),
+    VarDecl(Identifier, Option<ExprNode>),
+    Fun(FunctionDecl),
     Class(Class),
-    Return(Option<ExprNode>),
+    Return(Option<ExprNode>, usize),
     Block(Vec<Stmt>),
     If(ExprNode, Box<Stmt>, Option<Box<Stmt>>),
     While(ExprNode, Box<Stmt>),
@@ -283,9 +315,14 @@ impl Parser {
         ))
     }
 
-    fn consume_identifier(&mut self, message: &str) -> ParseResult<String> {
+    fn consume_identifier(&mut self, message: &str) -> ParseResult<Identifier> {
+        let line = self.peek().line();
+
         let result = if let Token::Identifier(ref name) = *self.peek().token() {
-            Ok(name.clone())
+            Ok(Identifier {
+                name: name.clone(),
+                line,
+            })
         } else {
             Err(ParseError::ExpectedIdentifier(
                 self.peek().clone(),
@@ -356,28 +393,24 @@ impl Parser {
         Ok(Stmt::VarDecl(name, initializer))
     }
 
-    fn fun_declaration(&mut self, kind: &str) -> ParseResult<Function> {
-        let name = self.consume_identifier(&format!("Expect {} name", kind))?;
+    fn fun_declaration(&mut self, kind: &str) -> ParseResult<FunctionDecl> {
+        let identifier = self.consume_identifier(&format!("Expect {} name", kind))?;
         self.consume(Token::LeftParen, &format!("Expect '(' after {} name", kind))?;
         let (parameters, body) = self.fun_parameters_and_body()?;
-        Ok(Function {
-            name,
+        Ok(FunctionDecl {
+            identifier,
             parameters,
             body,
         })
     }
 
-    fn fun_expression(&mut self) -> ParseResult<Function> {
+    fn fun_expression(&mut self) -> ParseResult<FunctionExpr> {
         self.consume(Token::LeftParen, "Expect '(' after fun keyword")?;
         let (parameters, body) = self.fun_parameters_and_body()?;
-        Ok(Function {
-            name: "anonymous".into(),
-            parameters,
-            body,
-        })
+        Ok(FunctionExpr { parameters, body })
     }
 
-    fn fun_parameters_and_body(&mut self) -> ParseResult<(Vec<String>, Vec<Stmt>)> {
+    fn fun_parameters_and_body(&mut self) -> ParseResult<(Vec<Identifier>, Vec<Stmt>)> {
         let mut parameters = Vec::new();
         if *self.peek().token() != Token::RightParen {
             loop {
@@ -405,7 +438,7 @@ impl Parser {
     }
 
     fn class_declaration(&mut self) -> ParseResult<Class> {
-        let name = self.consume_identifier("Expect class name")?;
+        let identifier = self.consume_identifier("Expect class name")?;
         self.consume(Token::LeftBrace, "Expect '{' after class name")?;
 
         let mut methods = Vec::new();
@@ -414,7 +447,10 @@ impl Parser {
         }
 
         self.consume(Token::RightBrace, "Expect '}' after class declaration")?;
-        Ok(Class { name, methods })
+        Ok(Class {
+            identifier,
+            methods,
+        })
     }
 
     fn statement(&mut self) -> ParseResult<Stmt> {
@@ -428,8 +464,8 @@ impl Parser {
             self.while_statement()
         } else if self.match_token(Token::For) {
             self.for_statement()
-        } else if self.match_token(Token::Return) {
-            self.return_statement()
+        } else if let Some(line) = self.match_token_line(Token::Return) {
+            self.return_statement(line)
         } else {
             self.expression_statement()
         }
@@ -519,7 +555,7 @@ impl Parser {
         Ok(body)
     }
 
-    fn return_statement(&mut self) -> ParseResult<Stmt> {
+    fn return_statement(&mut self, line: usize) -> ParseResult<Stmt> {
         let expr = if !self.check(Token::Semicolon) {
             Some(self.expression()?)
         } else {
@@ -528,7 +564,7 @@ impl Parser {
 
         self.consume(Token::Semicolon, "Expect ';' after return statement")?;
 
-        Ok(Stmt::Return(expr))
+        Ok(Stmt::Return(expr, line))
     }
 
     fn expression_statement(&mut self) -> ParseResult<Stmt> {
@@ -703,10 +739,16 @@ impl Parser {
             Token::False => Expr::Literal(Value::Bool(false)),
             Token::True => Expr::Literal(Value::Bool(true)),
             Token::Nil => Expr::Literal(Value::Nil),
-            Token::This => Expr::This(Var::new("this".into())),
+            Token::This => Expr::This(Var::new(Identifier {
+                name: "this".into(),
+                line,
+            })),
             Token::Number(n) => Expr::Literal(Value::Number(n)),
             Token::String(ref s) => Expr::Literal(Value::String(s.clone())),
-            Token::Identifier(ref name) => Expr::Var(Var::new(name.clone())),
+            Token::Identifier(ref name) => Expr::Var(Var::new(Identifier {
+                name: name.clone(),
+                line,
+            })),
             Token::LeftParen => {
                 let expr = self.expression()?;
                 self.consume(Token::RightParen, "Expect ')' after expression")?;
@@ -714,7 +756,7 @@ impl Parser {
             }
             Token::Fun => {
                 match self.fun_expression() {
-                    Ok(f) => Expr::AnonymousFun(f),
+                    Ok(f) => Expr::Fun(f),
                     Err(_) => {
                         // Revert position so that we display the same errors as
                         // the reference Lox implementation which does not have

@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
@@ -14,7 +13,7 @@ type MethodMap = HashMap<String, Rc<LoxFunction>>;
 pub struct LoxClass {
     name: String,
     superclass: Option<Rc<LoxClass>>,
-    methods: Rc<RefCell<MethodMap>>,
+    methods: Rc<MethodMap>,
 }
 
 impl LoxClass {
@@ -22,16 +21,12 @@ impl LoxClass {
         Self {
             name,
             superclass,
-            methods: Rc::new(RefCell::new(methods)),
+            methods: Rc::new(methods),
         }
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
     pub fn get_method(&self, name: &str, instance: Rc<LoxInstance>) -> Option<Rc<LoxFunction>> {
-        if let Some(method) = self.methods.borrow().get(name) {
+        if let Some(method) = self.methods.get(name) {
             return Some(Rc::new(method.bind(instance)));
         }
 
@@ -43,7 +38,7 @@ impl LoxClass {
     }
 
     fn initializer(&self) -> Option<Rc<LoxFunction>> {
-        self.methods.borrow().get("init").cloned()
+        self.methods.get("init").cloned()
     }
 }
 

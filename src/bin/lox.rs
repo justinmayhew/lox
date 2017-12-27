@@ -1,3 +1,4 @@
+extern crate env_logger;
 extern crate lox;
 extern crate rustyline;
 
@@ -18,6 +19,8 @@ const ERROR_CODE: i32 = 65;
 const RUNTIME_ERROR_CODE: i32 = 70;
 
 fn main() {
+    env_logger::init().unwrap();
+
     if let Some(filename) = env::args().nth(1) {
         execute_file(&filename);
     } else {

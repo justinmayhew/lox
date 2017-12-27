@@ -1,19 +1,35 @@
 extern crate env_logger;
-extern crate lox;
+#[macro_use]
+extern crate log;
 extern crate rustyline;
+extern crate time;
+
+mod callable;
+mod class;
+mod environment;
+mod instance;
+mod interpreter;
+mod parser;
+mod primitive;
+mod resolver;
+mod scanner;
 
 use std::env;
+use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::process;
+use std::result;
 
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 
-use lox::interpreter::Interpreter;
-use lox::parser::{Parser, Stmt};
-use lox::resolver::resolve;
-use lox::scanner::Scanner;
+use interpreter::Interpreter;
+use parser::{Parser, Stmt};
+use resolver::resolve;
+use scanner::Scanner;
+
+type Result<T> = result::Result<T, Box<Error>>;
 
 const ERROR_CODE: i32 = 65;
 const RUNTIME_ERROR_CODE: i32 = 70;

@@ -67,7 +67,6 @@ impl fmt::Display for Value {
 pub enum Error {
     Return(Value),
     RuntimeError { message: String, line: usize },
-    TypeError(String),
     DivideByZero,
     UndefinedVar(Var),
 }
@@ -75,7 +74,7 @@ pub enum Error {
 impl Error {
     pub fn line(&self) -> usize {
         match *self {
-            Error::Return(_) | Error::TypeError(_) | Error::DivideByZero => 0,
+            Error::Return(_) | Error::DivideByZero => 0,
             Error::RuntimeError { line, .. } => line,
             Error::UndefinedVar(ref var) => var.line(),
         }
@@ -87,7 +86,6 @@ impl fmt::Display for Error {
         match *self {
             Error::Return(ref value) => write!(f, "Return {}", value),
             Error::RuntimeError { ref message, .. } => write!(f, "{}", message),
-            Error::TypeError(ref msg) => write!(f, "TypeError {}", msg),
             Error::DivideByZero => write!(f, "DivideByZero: division by zero"),
             Error::UndefinedVar(ref var) => write!(f, "Undefined variable '{}'.", var.name()),
         }

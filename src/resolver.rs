@@ -28,6 +28,7 @@ enum FunctionKind {
 enum ClassKind {
     None,
     Class,
+    Subclass,
 }
 
 struct Var {
@@ -102,7 +103,14 @@ impl Resolver {
                 self.define(&class.identifier);
 
                 let enclosing_class = self.current_class;
-                self.current_class = ClassKind::Class;
+
+                if let Some(ref mut superclass) = class.superclass {
+                    self.current_class = ClassKind::Subclass;
+                    self.resolve_var(superclass);
+                    self.begin_scope(Some("super".into()));
+                } else {
+                    self.current_class = ClassKind::Class;
+                }
 
                 self.begin_scope(Some("this".into()));
 
@@ -116,6 +124,10 @@ impl Resolver {
                 }
 
                 self.end_scope();
+
+                if class.superclass.is_some() {
+                    self.end_scope();
+                }
 
                 self.current_class = enclosing_class;
             }
@@ -200,6 +212,23 @@ impl Resolver {
             Expr::Set(ref mut object, _, ref mut value) => {
                 self.resolve_expr(value);
                 self.resolve_expr(object);
+            }
+            Expr::Super(ref mut super_var, _) => {
+                if let ClassKind::None = self.current_class {
+                    self.error(
+                        super_var.line(),
+                        "super",
+                        "Cannot use 'super' outside of a class",
+                    );
+                } else if let ClassKind::Class = self.current_class {
+                    self.error(
+                        super_var.line(),
+                        "super",
+                        "Cannot use 'super' in a class with no superclass",
+                    );
+                }
+
+                self.resolve_var(super_var);
             }
             Expr::This(ref mut var) => {
                 if let ClassKind::None = self.current_class {

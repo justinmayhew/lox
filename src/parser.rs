@@ -91,6 +91,12 @@ pub struct Identifier {
     pub line: usize,
 }
 
+impl Identifier {
+    fn new(name: String, line: usize) -> Self {
+        Self { name, line }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Expr {
     Binary(Box<ExprNode>, BinOp, Box<ExprNode>),
@@ -104,6 +110,7 @@ pub enum Expr {
     Fun(FunctionExpr),
     Get(Box<ExprNode>, Identifier),
     Set(Box<ExprNode>, Identifier, Box<ExprNode>),
+    Super(Var, Var),
     This(Var),
 }
 
@@ -153,6 +160,7 @@ pub struct FunctionExpr {
 #[derive(Clone, Debug)]
 pub struct Class {
     pub identifier: Identifier,
+    pub superclass: Option<Var>,
     pub methods: Vec<FunctionDecl>,
 }
 
@@ -319,10 +327,7 @@ impl Parser {
         let line = self.peek().line();
 
         let result = if let Token::Identifier(ref name) = *self.peek().token() {
-            Ok(Identifier {
-                name: name.clone(),
-                line,
-            })
+            Ok(Identifier::new(name.clone(), line))
         } else {
             Err(ParseError::ExpectedIdentifier(
                 self.peek().clone(),
@@ -439,6 +444,14 @@ impl Parser {
 
     fn class_declaration(&mut self) -> ParseResult<Class> {
         let identifier = self.consume_identifier("Expect class name")?;
+
+        let superclass = if self.match_token(Token::Less) {
+            let identifier = self.consume_identifier("Expect superclass name")?;
+            Some(Var::new(identifier))
+        } else {
+            None
+        };
+
         self.consume(Token::LeftBrace, "Expect '{' after class name")?;
 
         let mut methods = Vec::new();
@@ -449,6 +462,7 @@ impl Parser {
         self.consume(Token::RightBrace, "Expect '}' after class declaration")?;
         Ok(Class {
             identifier,
+            superclass,
             methods,
         })
     }
@@ -739,16 +753,16 @@ impl Parser {
             Token::False => Expr::Literal(Value::Bool(false)),
             Token::True => Expr::Literal(Value::Bool(true)),
             Token::Nil => Expr::Literal(Value::Nil),
-            Token::This => Expr::This(Var::new(Identifier {
-                name: "this".into(),
-                line,
-            })),
+            Token::Super => {
+                self.consume(Token::Dot, "Expect '.' after 'super'")?;
+                let keyword = Var::new(Identifier::new("super".into(), line));
+                let method = self.consume_identifier("Expect superclass method name")?;
+                Expr::Super(keyword, Var::new(method))
+            }
+            Token::This => Expr::This(Var::new(Identifier::new("this".into(), line))),
             Token::Number(n) => Expr::Literal(Value::Number(n)),
             Token::String(ref s) => Expr::Literal(Value::String(s.clone())),
-            Token::Identifier(ref name) => Expr::Var(Var::new(Identifier {
-                name: name.clone(),
-                line,
-            })),
+            Token::Identifier(ref name) => Expr::Var(Var::new(Identifier::new(name.clone(), line))),
             Token::LeftParen => {
                 let expr = self.expression()?;
                 self.consume(Token::RightParen, "Expect ')' after expression")?;

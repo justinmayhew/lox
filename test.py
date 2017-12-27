@@ -3,7 +3,7 @@ import sys
 from craftinginterpreters.util import test
 
 NAME = 'rlox'
-TESTS = test.INTERPRETERS['chap12_classes'].tests.items()
+TESTS = test.INTERPRETERS['jlox'].tests.items()
 
 test.INTERPRETERS[NAME] = test.Interpreter(
     name=NAME,

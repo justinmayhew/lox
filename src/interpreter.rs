@@ -5,7 +5,7 @@ use std::rc::Rc;
 use callable::{Clock, Function, LoxCallable, LoxFunction};
 use class::LoxClass;
 use environment::Environment;
-use parser::{BinOp, Expr, ExprNode, LogicOp, Stmt, UnaryOp};
+use parser::{BinOp, Expr, ExprNode, LogicOp, Stmt, UnaryOp, Var};
 use primitive::{Error, Result, Value, ValueResult};
 
 pub struct Interpreter {
@@ -56,6 +56,23 @@ impl Interpreter {
             Stmt::Class(ref class) => {
                 self.env.define(class.name().into(), Value::Nil);
 
+                let mut superclass = None;
+
+                if let Some(ref var) = class.superclass {
+                    let value = self.lookup(var)?;
+                    if let Some(class) = value.to_class() {
+                        self.env = Environment::with_enclosing(self.env.clone());
+                        self.env
+                            .define("super".into(), Value::Class(Rc::clone(&class)));
+                        superclass = Some(class);
+                    } else {
+                        return Err(Error::RuntimeError {
+                            message: "Superclass must be a class.".into(),
+                            line: class.identifier.line,
+                        });
+                    }
+                }
+
                 let mut methods = HashMap::new();
                 for method in &class.methods {
                     let func = LoxFunction::new(
@@ -65,10 +82,15 @@ impl Interpreter {
                     );
                     methods.insert(method.name().into(), Rc::new(func));
                 }
-                let lox_class = Rc::new(LoxClass::new(class.name().into(), methods));
+
+                if superclass.is_some() {
+                    self.env = self.env.ancestor(1);
+                }
+
+                let lox_class = Rc::new(LoxClass::new(class.name().into(), superclass, methods));
 
                 self.env
-                    .assign(class.name().into(), Value::Callable(lox_class));
+                    .assign(class.name().into(), Value::Class(lox_class));
                 Ok(())
             }
             Stmt::Return(ref expr, _) => {
@@ -167,13 +189,7 @@ impl Interpreter {
                     UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
                 }
             }
-            Expr::Var(ref var) | Expr::This(ref var) => self.env
-                .ancestor(var.hops)
-                .get(var.name())
-                .ok_or_else(|| Error::UndefinedVar {
-                    var: var.clone(),
-                    line: node.line(),
-                }),
+            Expr::Var(ref var) | Expr::This(ref var) => self.lookup(var),
             Expr::VarAssign(ref var, ref expr) => {
                 let value = self.evaluate(expr)?;
                 let env = self.env.ancestor(var.hops);
@@ -181,10 +197,7 @@ impl Interpreter {
                 if env.assign(var.name().into(), value.clone()) {
                     Ok(value)
                 } else {
-                    Err(Error::UndefinedVar {
-                        var: var.clone(),
-                        line: node.line(),
-                    })
+                    Err(Error::UndefinedVar(var.clone()))
                 }
             }
             Expr::Call(ref callee, ref argument_exprs) => {
@@ -196,7 +209,7 @@ impl Interpreter {
                     arguments.push(self.evaluate(expr)?);
                 }
 
-                if let Value::Callable(f) = callee {
+                if let Some(f) = callee.to_callable() {
                     if f.arity() == arguments.len() {
                         f.call(self, arguments)
                     } else {
@@ -258,6 +271,24 @@ impl Interpreter {
                     })
                 }
             }
+            Expr::Super(ref super_var, ref method_var) => {
+                let superclass = self.lookup(super_var)?.to_class().unwrap();
+
+                let instance = self.env
+                    .ancestor(super_var.hops - 1)
+                    .get("this")
+                    .unwrap()
+                    .unwrap_instance();
+
+                if let Some(method) = superclass.get_method(method_var.name(), instance) {
+                    Ok(Value::Callable(method))
+                } else {
+                    Err(Error::RuntimeError {
+                        message: format!("Undefined property '{}'.", method_var.name()),
+                        line: method_var.line(),
+                    })
+                }
+            }
         }
     }
 
@@ -276,11 +307,22 @@ impl Interpreter {
         self.env = previous;
         result
     }
+
+    fn lookup(&self, var: &Var) -> Result<Value> {
+        self.env
+            .ancestor(var.hops)
+            .get(var.name())
+            .ok_or_else(|| Error::UndefinedVar(var.clone()))
+    }
 }
 
 fn is_truthy(value: &Value) -> bool {
     match *value {
-        Value::Callable(_) | Value::Instance(_) | Value::String(_) | Value::Number(_) => true,
+        Value::Callable(_)
+        | Value::Class(_)
+        | Value::Instance(_)
+        | Value::String(_)
+        | Value::Number(_) => true,
         Value::Bool(b) => b,
         Value::Nil => false,
     }
@@ -306,6 +348,7 @@ fn is_equal(left: Value, right: Value) -> bool {
         (Value::Bool(a), Value::Bool(b)) => a == b,
         (Value::Nil, Value::Nil) => true,
         (Value::Callable(a), Value::Callable(b)) => Rc::ptr_eq(&a, &b),
+        (Value::Class(a), Value::Class(b)) => Rc::ptr_eq(&a, &b),
         (Value::Instance(a), Value::Instance(b)) => Rc::ptr_eq(&a, &b),
         _ => false,
     }

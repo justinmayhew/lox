@@ -13,13 +13,15 @@ type MethodMap = HashMap<String, Rc<LoxFunction>>;
 #[derive(Clone, Debug)]
 pub struct LoxClass {
     name: String,
+    superclass: Option<Rc<LoxClass>>,
     methods: Rc<RefCell<MethodMap>>,
 }
 
 impl LoxClass {
-    pub fn new(name: String, methods: MethodMap) -> Self {
+    pub fn new(name: String, superclass: Option<Rc<LoxClass>>, methods: MethodMap) -> Self {
         Self {
             name,
+            superclass,
             methods: Rc::new(RefCell::new(methods)),
         }
     }
@@ -29,10 +31,15 @@ impl LoxClass {
     }
 
     pub fn get_method(&self, name: &str, instance: Rc<LoxInstance>) -> Option<Rc<LoxFunction>> {
-        self.methods
-            .borrow()
-            .get(name)
-            .map(|method| Rc::new(method.bind(instance)))
+        if let Some(method) = self.methods.borrow().get(name) {
+            return Some(Rc::new(method.bind(instance)));
+        }
+
+        if let Some(ref superclass) = self.superclass {
+            superclass.get_method(name, instance)
+        } else {
+            None
+        }
     }
 
     fn initializer(&self) -> Option<Rc<LoxFunction>> {

@@ -1,3 +1,4 @@
+use std::f64::{INFINITY, NEG_INFINITY};
 use std::fmt;
 use std::rc::Rc;
 
@@ -52,8 +53,11 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             String(ref s) => write!(f, "{}", s),
-            Number(n) => if n == 0.0 && n.is_sign_negative() {
-                // The JVM prints negative zero with a sign.
+            Number(n) => if n == INFINITY {
+                write!(f, "Infinity")
+            } else if n == NEG_INFINITY {
+                write!(f, "-Infinity")
+            } else if n == 0.0 && n.is_sign_negative() {
                 write!(f, "-{}", n)
             } else {
                 write!(f, "{}", n)

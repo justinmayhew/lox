@@ -145,13 +145,7 @@ impl Interpreter {
                     },
                     BinOp::Minus => with_numbers(a, b, line, |a, b| Ok(Value::Number(a - b))),
                     BinOp::Star => with_numbers(a, b, line, |a, b| Ok(Value::Number(a * b))),
-                    BinOp::Slash => with_numbers(a, b, line, |a, b| {
-                        if b == 0.0 {
-                            Err(Error::DivideByZero)
-                        } else {
-                            Ok(Value::Number(a / b))
-                        }
-                    }),
+                    BinOp::Slash => with_numbers(a, b, line, |a, b| Ok(Value::Number(a / b))),
                     BinOp::Greater => with_numbers(a, b, line, |a, b| Ok(Value::Bool(a > b))),
                     BinOp::GreaterEqual => with_numbers(a, b, line, |a, b| Ok(Value::Bool(a >= b))),
                     BinOp::Less => with_numbers(a, b, line, |a, b| Ok(Value::Bool(a < b))),

@@ -58,8 +58,7 @@ impl Interpreter {
                 let mut superclass = None;
 
                 if let Some(ref var) = class.superclass {
-                    let value = self.lookup(var)?;
-                    if let Some(class) = value.to_class() {
+                    if let Value::Class(class) = self.lookup(var)? {
                         self.env = Environment::with_enclosing(self.env.clone());
                         self.env
                             .define("super".into(), Value::Class(Rc::clone(&class)));
@@ -110,7 +109,7 @@ impl Interpreter {
                 self.execute_block(stmts, env)
             }
             Stmt::If(ref condition, ref then_branch, ref else_branch) => {
-                if is_truthy(&self.evaluate(condition)?) {
+                if self.evaluate(condition)?.is_truthy() {
                     self.exec_stmt(then_branch)?;
                 } else if let Some(ref branch) = *else_branch {
                     self.exec_stmt(branch)?;
@@ -118,7 +117,7 @@ impl Interpreter {
                 Ok(())
             }
             Stmt::While(ref condition, ref body) => {
-                while is_truthy(&self.evaluate(condition)?) {
+                while self.evaluate(condition)?.is_truthy() {
                     self.exec_stmt(body)?;
                 }
                 Ok(())
@@ -134,8 +133,8 @@ impl Interpreter {
                 let b = self.evaluate(right_expr)?;
 
                 match op {
-                    BinOp::EqualEqual => Ok(Value::Bool(is_equal(a, b))),
-                    BinOp::BangEqual => Ok(Value::Bool(!is_equal(a, b))),
+                    BinOp::EqualEqual => Ok(Value::Bool(a == b)),
+                    BinOp::BangEqual => Ok(Value::Bool(a != b)),
                     BinOp::Plus => match (a, b) {
                         (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
                         (Value::String(a), Value::String(b)) => Ok(Value::String(a + &b)),
@@ -163,12 +162,12 @@ impl Interpreter {
                 let left = self.evaluate(left_expr)?;
 
                 match op {
-                    LogicOp::And => if is_truthy(&left) {
+                    LogicOp::And => if left.is_truthy() {
                         self.evaluate(right_expr)
                     } else {
                         Ok(left)
                     },
-                    LogicOp::Or => if is_truthy(&left) {
+                    LogicOp::Or => if left.is_truthy() {
                         Ok(left)
                     } else {
                         self.evaluate(right_expr)
@@ -189,7 +188,7 @@ impl Interpreter {
                             line: expr.line(),
                         })
                     },
-                    UnaryOp::Bang => Ok(Value::Bool(!is_truthy(&value))),
+                    UnaryOp::Bang => Ok(Value::Bool(!value.is_truthy())),
                 }
             }
             Expr::Var(ref var) | Expr::This(ref var) => self.lookup(var),
@@ -212,7 +211,7 @@ impl Interpreter {
                     arguments.push(self.evaluate(expr)?);
                 }
 
-                if let Some(f) = callee.to_callable() {
+                if let Some(f) = callee.into_callable() {
                     if f.arity() == arguments.len() {
                         f.call(self, arguments)
                     } else {
@@ -275,13 +274,17 @@ impl Interpreter {
                 }
             }
             Expr::Super(ref super_var, ref method_var) => {
-                let superclass = self.lookup(super_var)?.to_class().unwrap();
+                let env = self.env.ancestor(super_var.hops - 1);
 
-                let instance = self.env
-                    .ancestor(super_var.hops - 1)
-                    .get("this")
-                    .unwrap()
-                    .unwrap_instance();
+                let instance = match env.get("this").unwrap() {
+                    Value::Instance(instance) => instance,
+                    value => panic!("Expected 'this' to be an Instance, found {:?}", value),
+                };
+
+                let superclass = match self.lookup(super_var)? {
+                    Value::Class(class) => class,
+                    value => panic!("Expected 'super' to be a Class, found {:?}", value),
+                };
 
                 if let Some(method) = superclass.bind_method(method_var.name(), instance) {
                     Ok(Value::Callable(method))
@@ -319,18 +322,6 @@ impl Interpreter {
     }
 }
 
-fn is_truthy(value: &Value) -> bool {
-    match *value {
-        Value::Callable(_)
-        | Value::Class(_)
-        | Value::Instance(_)
-        | Value::String(_)
-        | Value::Number(_) => true,
-        Value::Bool(b) => b,
-        Value::Nil => false,
-    }
-}
-
 fn with_numbers<F>(left: Value, right: Value, line: usize, f: F) -> Result<Value>
 where
     F: Fn(f64, f64) -> Result<Value>,
@@ -341,18 +332,5 @@ where
             message: "Operands must be numbers.".into(),
             line,
         }),
-    }
-}
-
-fn is_equal(left: Value, right: Value) -> bool {
-    match (left, right) {
-        (Value::String(a), Value::String(b)) => a == b,
-        (Value::Number(a), Value::Number(b)) => a.eq(&b),
-        (Value::Bool(a), Value::Bool(b)) => a == b,
-        (Value::Nil, Value::Nil) => true,
-        (Value::Callable(a), Value::Callable(b)) => Rc::ptr_eq(&a, &b),
-        (Value::Class(a), Value::Class(b)) => Rc::ptr_eq(&a, &b),
-        (Value::Instance(a), Value::Instance(b)) => Rc::ptr_eq(&a, &b),
-        _ => false,
     }
 }

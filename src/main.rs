@@ -4,14 +4,9 @@ extern crate log;
 extern crate rustyline;
 extern crate time;
 
-mod callable;
-mod class;
-mod environment;
-mod instance;
-mod interpreter;
 mod parser;
-mod primitive;
 mod resolver;
+mod runtime;
 mod scanner;
 
 use std::env;
@@ -24,9 +19,9 @@ use std::result;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 
-use interpreter::Interpreter;
 use parser::{Parser, Stmt};
 use resolver::resolve;
+use runtime::Interpreter;
 use scanner::Scanner;
 
 type Result<T> = result::Result<T, Box<Error>>;

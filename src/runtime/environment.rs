@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::rc::Rc;
 
-use primitive::Value;
+use super::Value;
 
 #[derive(Debug)]
 struct Inner {

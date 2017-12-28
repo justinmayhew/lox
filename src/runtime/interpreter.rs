@@ -2,11 +2,9 @@ use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 
-use callable::{Clock, Function, LoxCallable, LoxFunction};
-use class::LoxClass;
-use environment::Environment;
-use parser::{BinOp, Expr, ExprNode, LogicOp, Stmt, UnaryOp, Var};
-use primitive::{Error, Result, Value, ValueResult};
+use parser::{BinOp, Expr, ExprNode, Function, LogicOp, Stmt, UnaryOp, Var};
+use super::builtins::Clock;
+use super::{Environment, Error, LoxCallable, LoxClass, LoxFunction, Result, Value};
 
 pub struct Interpreter {
     env: Environment,
@@ -87,7 +85,11 @@ impl Interpreter {
                     self.env = self.env.ancestor(1);
                 }
 
-                let lox_class = Rc::new(LoxClass::new(class.name().into(), superclass, methods));
+                let lox_class = Rc::new(LoxClass::new(
+                    class.name().into(),
+                    superclass,
+                    Rc::new(methods),
+                ));
 
                 self.env
                     .assign(class.name().into(), Value::Class(lox_class));
@@ -123,7 +125,7 @@ impl Interpreter {
         }
     }
 
-    fn evaluate(&mut self, node: &ExprNode) -> ValueResult {
+    fn evaluate(&mut self, node: &ExprNode) -> Result<Value> {
         match *node.expr() {
             Expr::Binary(ref left_expr, op, ref right_expr) => {
                 let line = left_expr.line();
@@ -242,7 +244,7 @@ impl Interpreter {
                         Ok(value)
                     } else if let Some(method) = instance
                         .class()
-                        .get_method(&identifier.name, Rc::clone(&instance))
+                        .bind_method(&identifier.name, Rc::clone(&instance))
                     {
                         Ok(Value::Callable(method))
                     } else {
@@ -280,7 +282,7 @@ impl Interpreter {
                     .unwrap()
                     .unwrap_instance();
 
-                if let Some(method) = superclass.get_method(method_var.name(), instance) {
+                if let Some(method) = superclass.bind_method(method_var.name(), instance) {
                     Ok(Value::Callable(method))
                 } else {
                     Err(Error::RuntimeError {
@@ -328,9 +330,9 @@ fn is_truthy(value: &Value) -> bool {
     }
 }
 
-fn with_numbers<F>(left: Value, right: Value, line: usize, f: F) -> ValueResult
+fn with_numbers<F>(left: Value, right: Value, line: usize, f: F) -> Result<Value>
 where
-    F: Fn(f64, f64) -> ValueResult,
+    F: Fn(f64, f64) -> Result<Value>,
 {
     match (left, right) {
         (Value::Number(left), Value::Number(right)) => f(left, right),

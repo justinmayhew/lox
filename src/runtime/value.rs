@@ -1,11 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
-use std::result;
 
-use callable::LoxCallable;
-use class::LoxClass;
-use instance::LoxInstance;
-use parser::Var;
+use super::{LoxCallable, LoxClass, LoxInstance};
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -23,7 +19,11 @@ impl Value {
         match self {
             Value::Callable(f) => Some(f),
             Value::Class(c) => Some(c),
-            _ => None,
+            Value::String(_)
+            | Value::Number(_)
+            | Value::Bool(_)
+            | Value::Nil
+            | Value::Instance(_) => None,
         }
     }
 
@@ -62,35 +62,3 @@ impl fmt::Display for Value {
         }
     }
 }
-
-#[derive(Debug)]
-pub enum Error {
-    Return(Value),
-    RuntimeError { message: String, line: usize },
-    DivideByZero,
-    UndefinedVar(Var),
-}
-
-impl Error {
-    pub fn line(&self) -> usize {
-        match *self {
-            Error::Return(_) | Error::DivideByZero => 0,
-            Error::RuntimeError { line, .. } => line,
-            Error::UndefinedVar(ref var) => var.line(),
-        }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Return(ref value) => write!(f, "Return {}", value),
-            Error::RuntimeError { ref message, .. } => write!(f, "{}", message),
-            Error::DivideByZero => write!(f, "DivideByZero: division by zero"),
-            Error::UndefinedVar(ref var) => write!(f, "Undefined variable '{}'.", var.name()),
-        }
-    }
-}
-
-pub type Result<T> = result::Result<T, Error>;
-pub type ValueResult = Result<Value>;

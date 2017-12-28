@@ -1,48 +1,7 @@
-use std::fmt;
 use std::rc::Rc;
 
-use time;
-
-use environment::Environment;
-use instance::LoxInstance;
-use interpreter::Interpreter;
-use parser::{FunctionDecl, FunctionExpr, Identifier, Stmt};
-use primitive::{Error, Value, ValueResult};
-
-#[derive(Clone, Debug)]
-pub enum Function {
-    Decl(FunctionDecl),
-    Expr(FunctionExpr),
-}
-
-pub trait LoxCallable: fmt::Display + fmt::Debug {
-    fn call(&self, &mut Interpreter, Vec<Value>) -> ValueResult;
-    fn arity(&self) -> usize;
-    fn name(&self) -> &str;
-}
-
-#[derive(Debug)]
-pub struct Clock;
-
-impl LoxCallable for Clock {
-    fn call(&self, _: &mut Interpreter, _: Vec<Value>) -> ValueResult {
-        Ok(Value::Number(time::now().to_timespec().sec as f64))
-    }
-
-    fn arity(&self) -> usize {
-        0
-    }
-
-    fn name(&self) -> &str {
-        "clock"
-    }
-}
-
-impl fmt::Display for Clock {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "<fn clock>")
-    }
-}
+use parser::{Function, Identifier, Stmt};
+use super::{Environment, Error, Interpreter, LoxCallable, LoxInstance, Result, Value};
 
 #[derive(Clone, Debug)]
 pub struct LoxFunction {
@@ -86,7 +45,7 @@ impl LoxFunction {
 }
 
 impl LoxCallable for LoxFunction {
-    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Value>) -> ValueResult {
+    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Value>) -> Result<Value> {
         let env = Environment::with_enclosing(self.closure.clone());
 
         // Bind the parameters to the arguments the function was called with.
@@ -119,11 +78,5 @@ impl LoxCallable for LoxFunction {
             Function::Decl(ref f) => f.name(),
             Function::Expr(_) => "anonymous",
         }
-    }
-}
-
-impl fmt::Display for LoxFunction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "<fn {}>", self.name())
     }
 }

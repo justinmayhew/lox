@@ -1,8 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use class::LoxClass;
-use primitive::Value;
+use super::{LoxClass, Value};
 
 #[derive(Debug)]
 pub struct LoxInstance {

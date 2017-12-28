@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::usize;
 
-use primitive::Value;
+use runtime::Value;
 use scanner::{Item, Token};
 
 const PARAM_LIMIT: usize = 8;
@@ -155,6 +155,12 @@ impl FunctionDecl {
 pub struct FunctionExpr {
     pub parameters: Vec<Identifier>,
     pub body: Vec<Stmt>,
+}
+
+#[derive(Clone, Debug)]
+pub enum Function {
+    Decl(FunctionDecl),
+    Expr(FunctionExpr),
 }
 
 #[derive(Clone, Debug)]

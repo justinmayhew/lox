@@ -3,7 +3,7 @@ use std::mem;
 use std::rc::Rc;
 
 use parser::{BinOp, Expr, ExprNode, Function, LogicOp, Stmt, UnaryOp, Var};
-use super::builtins::Clock;
+use super::builtins::{Clock, Input};
 use super::{Environment, Error, LoxCallable, LoxClass, LoxFunction, Result, Value};
 
 pub struct Interpreter {
@@ -14,6 +14,7 @@ impl Default for Interpreter {
     fn default() -> Self {
         let env = Environment::default();
         env.define(Clock.name().into(), Value::Callable(Rc::new(Clock)));
+        env.define(Input.name().into(), Value::Callable(Rc::new(Input)));
         Self { env }
     }
 }

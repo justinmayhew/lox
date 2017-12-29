@@ -107,6 +107,10 @@ pub struct Item {
 }
 
 impl Item {
+    fn new(token: Token, line: usize) -> Self {
+        Self { token, line }
+    }
+
     pub fn token(&self) -> &Token {
         &self.token
     }
@@ -166,44 +170,49 @@ impl<'s> Scanner<'s> {
     pub fn next_item(&mut self) -> Result<Item> {
         self.eat_whitespace();
 
-        let token = match self.get() {
-            Some('(') => Token::LeftParen,
-            Some(')') => Token::RightParen,
-            Some('{') => Token::LeftBrace,
-            Some('}') => Token::RightBrace,
-            Some(',') => Token::Comma,
-            Some('.') => Token::Dot,
-            Some('-') => Token::Minus,
-            Some('+') => Token::Plus,
-            Some(';') => Token::Semicolon,
-            Some('*') => Token::Star,
-            Some('!') => if self.next_is('=') {
+        let ch = match self.get() {
+            Some(ch) => ch,
+            None => return Ok(Item::new(Token::Eof, self.line)),
+        };
+
+        let token = match ch {
+            '(' => Token::LeftParen,
+            ')' => Token::RightParen,
+            '{' => Token::LeftBrace,
+            '}' => Token::RightBrace,
+            ',' => Token::Comma,
+            '.' => Token::Dot,
+            '-' => Token::Minus,
+            '+' => Token::Plus,
+            ';' => Token::Semicolon,
+            '*' => Token::Star,
+            '!' => if self.next_is('=') {
                 Token::BangEqual
             } else {
                 Token::Bang
             },
-            Some('=') => if self.next_is('=') {
+            '=' => if self.next_is('=') {
                 Token::EqualEqual
             } else {
                 Token::Equal
             },
-            Some('<') => if self.next_is('=') {
+            '<' => if self.next_is('=') {
                 Token::LessEqual
             } else {
                 Token::Less
             },
-            Some('>') => if self.next_is('=') {
+            '>' => if self.next_is('=') {
                 Token::GreaterEqual
             } else {
                 Token::Greater
             },
-            Some('/') => if self.next_is('/') {
+            '/' => if self.next_is('/') {
                 self.eat_line();
                 return self.next_item();
             } else {
                 Token::Slash
             },
-            Some(c) => if c == '"' {
+            c => if c == '"' {
                 Token::String(self.eat_string()?)
             } else if is_digit(c) {
                 Token::Number(self.eat_number(c)?)
@@ -212,13 +221,9 @@ impl<'s> Scanner<'s> {
             } else {
                 return Err(From::from("Unexpected character"));
             },
-            None => Token::Eof,
         };
 
-        Ok(Item {
-            token,
-            line: self.line,
-        })
+        Ok(Item::new(token, self.line))
     }
 
     fn get(&mut self) -> Option<char> {

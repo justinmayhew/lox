@@ -64,10 +64,7 @@ impl Interpreter {
                             .define("super".into(), Value::Class(Rc::clone(&class)));
                         superclass = Some(class);
                     } else {
-                        return Err(Error::RuntimeError {
-                            message: "Superclass must be a class.".into(),
-                            line: class.identifier.line,
-                        });
+                        err!(class.identifier.line, "Superclass must be a class");
                     }
                 }
 
@@ -138,10 +135,7 @@ impl Interpreter {
                     BinOp::Plus => match (a, b) {
                         (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
                         (Value::String(a), Value::String(b)) => Ok(Value::String(a + &b)),
-                        _ => Err(Error::RuntimeError {
-                            message: "Operands must be two numbers or two strings.".into(),
-                            line,
-                        }),
+                        _ => err!(line, "Operands must be two numbers or two strings"),
                     },
                     BinOp::Minus => with_numbers(a, b, line, |a, b| Ok(Value::Number(a - b))),
                     BinOp::Star => with_numbers(a, b, line, |a, b| Ok(Value::Number(a * b))),
@@ -177,10 +171,7 @@ impl Interpreter {
                     UnaryOp::Minus => if let Value::Number(n) = value {
                         Ok(Value::Number(-n))
                     } else {
-                        Err(Error::RuntimeError {
-                            message: "Operand must be a number.".into(),
-                            line: expr.line(),
-                        })
+                        err!(expr.line(), "Operand must be a number")
                     },
                     UnaryOp::Bang => Ok(Value::Bool(!value.is_truthy())),
                 }
@@ -209,20 +200,15 @@ impl Interpreter {
                     if f.arity() == arguments.len() {
                         f.call(self, arguments)
                     } else {
-                        Err(Error::RuntimeError {
-                            message: format!(
-                                "Expected {} arguments but got {}.",
-                                f.arity(),
-                                arguments.len()
-                            ),
+                        err!(
                             line,
-                        })
+                            "Expected {} arguments but got {}",
+                            f.arity(),
+                            arguments.len()
+                        )
                     }
                 } else {
-                    Err(Error::RuntimeError {
-                        message: "Can only call functions and classes.".into(),
-                        line,
-                    })
+                    err!(line, "Can only call functions and classes")
                 }
             }
             Expr::Fun(ref fun) => {
@@ -236,22 +222,13 @@ impl Interpreter {
                 if let Value::Instance(instance) = value {
                     if let Some(value) = instance.get_field(&identifier.name) {
                         Ok(value)
-                    } else if let Some(method) = instance
-                        .class()
-                        .bind_method(&identifier.name, Rc::clone(&instance))
-                    {
-                        Ok(Value::Callable(method))
                     } else {
-                        Err(Error::RuntimeError {
-                            message: format!("Undefined property '{}'.", identifier.name),
-                            line: expr.line(),
-                        })
+                        Ok(Value::Callable(instance
+                            .class()
+                            .bind_method(identifier, Rc::clone(&instance))?))
                     }
                 } else {
-                    Err(Error::RuntimeError {
-                        message: "Only instances have properties.".into(),
-                        line: expr.line(),
-                    })
+                    err!(expr.line(), "Only instances have properties")
                 }
             }
             Expr::Set(ref left, ref identifier, ref right) => {
@@ -261,13 +238,10 @@ impl Interpreter {
                     instance.set(identifier.name.clone(), value.clone());
                     Ok(value)
                 } else {
-                    Err(Error::RuntimeError {
-                        message: "Only instances have fields.".into(),
-                        line: left.line(),
-                    })
+                    err!(left.line(), "Only instances have fields")
                 }
             }
-            Expr::Super(ref super_var, ref method_var) => {
+            Expr::Super(ref super_var, ref identifier) => {
                 let env = self.env.ancestor(super_var.hops - 1);
 
                 let instance = match env.get("this").unwrap() {
@@ -280,14 +254,8 @@ impl Interpreter {
                     value => panic!("Expected 'super' to be a Class, found {:?}", value),
                 };
 
-                if let Some(method) = superclass.bind_method(method_var.name(), instance) {
-                    Ok(Value::Callable(method))
-                } else {
-                    Err(Error::RuntimeError {
-                        message: format!("Undefined property '{}'.", method_var.name()),
-                        line: method_var.line(),
-                    })
-                }
+                Ok(Value::Callable(superclass
+                    .bind_method(identifier, instance)?))
             }
         }
     }
@@ -322,9 +290,6 @@ where
 {
     match (left, right) {
         (Value::Number(left), Value::Number(right)) => f(left, right),
-        _ => Err(Error::RuntimeError {
-            message: "Operands must be numbers.".into(),
-            line,
-        }),
+        _ => err!(line, "Operands must be numbers"),
     }
 }

@@ -110,7 +110,7 @@ pub enum Expr {
     Fun(FunctionExpr),
     Get(Box<ExprNode>, Identifier),
     Set(Box<ExprNode>, Identifier, Box<ExprNode>),
-    Super(Var, Var),
+    Super(Var, Identifier),
     This(Var),
 }
 
@@ -763,7 +763,7 @@ impl Parser {
                 self.consume(Token::Dot, "Expect '.' after 'super'")?;
                 let keyword = Var::new(Identifier::new("super".into(), line));
                 let method = self.consume_identifier("Expect superclass method name")?;
-                Expr::Super(keyword, Var::new(method))
+                Expr::Super(keyword, method)
             }
             Token::This => Expr::This(Var::new(Identifier::new("this".into(), line))),
             Token::Number(n) => Expr::Literal(Value::Number(n)),

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use super::{Interpreter, LoxCallable, LoxFunction, LoxInstance, Result, Value};
+use parser::Identifier;
+use super::{Error, Interpreter, LoxCallable, LoxFunction, LoxInstance, Result, Value};
 
 type MethodMap = Rc<HashMap<String, Rc<LoxFunction>>>;
 
@@ -21,15 +22,19 @@ impl LoxClass {
         }
     }
 
-    pub fn bind_method(&self, name: &str, instance: Rc<LoxInstance>) -> Option<Rc<LoxFunction>> {
-        if let Some(method) = self.methods.get(name) {
-            return Some(Rc::new(method.bind(instance)));
+    pub fn bind_method(
+        &self,
+        identifier: &Identifier,
+        instance: Rc<LoxInstance>,
+    ) -> Result<Rc<LoxFunction>> {
+        if let Some(method) = self.methods.get(&identifier.name) {
+            return Ok(Rc::new(method.bind(instance)));
         }
 
         if let Some(ref superclass) = self.superclass {
-            superclass.bind_method(name, instance)
+            superclass.bind_method(identifier, instance)
         } else {
-            None
+            err!(identifier.line, "Undefined property '{}'", identifier.name)
         }
     }
 

@@ -6,15 +6,15 @@ use super::Value;
 #[derive(Debug)]
 pub enum Error {
     Return(Value),
-    RuntimeError { message: String, line: usize },
+    Message { message: String, line: usize },
     UndefinedVar(Var),
 }
 
 impl Error {
     pub fn line(&self) -> usize {
         match *self {
-            Error::Return(_) => 0,
-            Error::RuntimeError { line, .. } => line,
+            Error::Return(_) => unreachable!(),
+            Error::Message { line, .. } => line,
             Error::UndefinedVar(ref var) => var.line(),
         }
     }
@@ -23,9 +23,16 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::Return(ref value) => write!(f, "Return {}", value),
-            Error::RuntimeError { ref message, .. } => write!(f, "{}", message),
-            Error::UndefinedVar(ref var) => write!(f, "Undefined variable '{}'.", var.name()),
+            Error::Return(_) => unreachable!(),
+            Error::Message { ref message, .. } => write!(f, "{}", message),
+            Error::UndefinedVar(ref var) => write!(f, "Undefined variable '{}'", var.name()),
         }
     }
+}
+
+macro_rules! err {
+    ($line:expr, $($tt:tt)*) => ({
+        let message = Error::Message { message: format!($($tt)*), line: $line };
+        return Err(message);
+    })
 }

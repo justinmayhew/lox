@@ -1,6 +1,8 @@
+#[macro_use]
+mod error;
+
 mod builtins;
 mod environment;
-mod error;
 mod interpreter;
 mod lox_callable;
 mod lox_class;

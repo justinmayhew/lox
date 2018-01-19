@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Justin Mayhew <mayhew@live.ca>"]
 
 [dependencies]
-env_logger = "0.4.3"
-log = "0.3.8"
+chrono = "0.4.0"
+env_logger = "0.5.2"
+log = "0.4.1"
 rustyline = "1.0.0"
-time = "0.1.38"

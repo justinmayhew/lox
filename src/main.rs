@@ -1,8 +1,8 @@
+extern crate chrono;
 extern crate env_logger;
 #[macro_use]
 extern crate log;
 extern crate rustyline;
-extern crate time;
 
 mod parser;
 mod resolver;
@@ -30,7 +30,7 @@ const ERROR_CODE: i32 = 65;
 const RUNTIME_ERROR_CODE: i32 = 70;
 
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
 
     if let Some(filename) = env::args().nth(1) {
         execute_file(&filename);

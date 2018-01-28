@@ -74,9 +74,7 @@ impl Environment {
 
     pub fn ancestor(&self, hops: usize) -> Environment {
         if hops == 0 {
-            Environment {
-                inner: Rc::clone(&self.inner),
-            }
+            self.clone()
         } else {
             self.inner.borrow().ancestor(hops - 1)
         }

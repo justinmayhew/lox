@@ -28,7 +28,7 @@ impl Inner {
 
     pub fn ancestor(&self, hops: usize) -> Environment {
         self.enclosing
-            .clone()
+            .as_ref()
             .expect("missing enclosing environment")
             .ancestor(hops)
     }
